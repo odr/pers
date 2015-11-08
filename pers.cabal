@@ -15,7 +15,10 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib
+  exposed-modules:     Fields
+                        , NamedBTree
+                        , NamedBTree2
+                        , SplitRec
   build-depends:       base >= 4.7 && < 5
                         , ghc-prim >= 0.4
                         , record >= 0.4

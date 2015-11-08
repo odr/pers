@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 -- {-# LANGUAGE OverlappingInstances #-}
 
-module Lib
+module Fields
     ( HasField(..)
     , Projection(..)
     ) where
