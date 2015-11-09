@@ -1,10 +1,26 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Main where
 
-import NamedBTree2
+import NamedBTree
 
 main :: IO ()
-main = print ((f1_7 $ ()) :: T7)
+main = print
+    -- TF - FD
+    -- test7 defined ---
+    -- test7 -- 7s
+    -- (test7 ::T7) -- 10s
+    -- (f1_7 ()) -- 16s
+    -- ((f1_7 $ ()) :: T7) -- 25s
+
+    -- test11 defined ---
+    -- test7 -- 12s
+    -- test11 -- 13s
+    -- (test4::T4) -- 11s - 3.5s
+    -- (test5 :: T5) -- 12s
+    -- (test6 :: T6) -- 12s
+    -- (test7 :: T7) -- 14s - 7s
+    -- (test8 ::T8) -- 28s, no memory lost - 8s
+    (test11 ::T11) -- ? - 17s
 
 type T1  = ()  <+ "1" :>Int
 type T2  = T1  <+ "2" :>Int
@@ -60,3 +76,28 @@ f21 a = a <+ (V 21 :: "21":>Int)
 
 f6_10  a = f6 . f7 . f8 . f9 . f10 $ a
 f11_21 a = f11. f12. f13. f14. f15. f16. f17. f18. f19. f20. f21 $ a
+
+test1 = ()       <+ (V 1 :: "1":>Int)   -- :: T1
+test2  = test1   <+ (V 2 :: "2":>Int)   -- :: T2
+test3  = test2   <+ (V 3 :: "3":>Int)   -- :: T3
+test4  = test3   <+ (V 4 :: "4":>Int)   -- :: T4
+test5  = test4   <+ (V 5 :: "5":>Int)   -- :: T5
+test6  = test5   <+ (V 6 :: "6":>Int)   -- :: T6
+test7  = test6   <+ (V 7 :: "7":>Int)   -- :: T7
+test8  = test7   <+ (V 8 :: "8":>Int)   -- :: T8
+test9  = test8   <+ (V 9 :: "9":>Int)   -- :: T9
+test10 = test9   <+ (V 10 :: "10":>Int) -- :: T10
+test11 = test10  <+ (V 11 :: "11":>Int) -- :: T11
+{-
+test12 = test11  <+ (V 12 :: "12":>Int) -- :: T12
+test13 = test12  <+ (V 13 :: "13":>Int) -- :: T13
+test14 = test13  <+ (V 14 :: "14":>Int) -- :: T14
+test15 = test14  <+ (V 15 :: "15":>Int) -- :: T15
+test16 = test15  <+ (V 16 :: "16":>Int) -- :: T16
+test17 = test16  <+ (V 17 :: "17":>Int) -- :: T17
+test18 = test17  <+ (V 18 :: "18":>Int) -- :: T18
+test19 = test18  <+ (V 19 :: "19":>Int) -- :: T19
+test20 = test19  <+ (V 20 :: "20":>Int) -- :: T20
+test21 = test20  <+ (V 21 :: "21":>Int) -- :: T21
+test22 = test21  <+ (V 22 :: "22":>Int) -- :: T22
+-}

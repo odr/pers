@@ -170,7 +170,7 @@ instance (NTAdd (kl:>l) (nt:>vt), NTMin (kr:>r)
     type TAB "gl-ar-even" (k:>(kl:>l,nt:>vt,kr:>r)) d
         = (k+1) :>  ( kl:>l <+ nt:>vt
                     , TMin (kr:>r)
-                    , kr:>r <+ d <\ TName (TMin (kr :> r))
+                    , kr:>r <+ d <\ TName (TMin (kr :> r)) -- no problem!
                     )
     nab _ (V (l,t,r)) d  = V (l<+t, getNTMin r, r <+ d <\mn )
       where
@@ -185,7 +185,7 @@ instance (NTAdd (kl:>l) (nt:>vt), NTMin (kr:>r)
     type TAB "gl-ar-odd" (k:>(kl:>l,nt:>vt,kr:>r)) d
         = (k+1) :>  ( kl:>l <+ nt:>vt
                     , TMin (kr:>r)
-                    , kr:>r <\ TName (TMin (kr:>r)) <+ d
+                    , kr:>r <\ TName (TMin (kr:>r)) <+ d  -- ok!
                     )
     nab _ (V (l,t,r)) d  = V (l<+t, getNTMin r, r <\ mn <+ d)
       where
@@ -207,7 +207,7 @@ instance (NTAdd (kr:>r) (nt:>vt), NTMax (kl:>l)
     => NTAddB "gr-al-even" ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
   where
     type TAB "gr-al-even" (k:>(kl:>l,nt:>vt,kr:>r)) d
-        = (k+1) :>  ( kl:>l <\ TName (TMax (kl:>l)) <+ d
+        = (k+1) :>  ( kl:>l <\ TName (TMax (kl:>l)) <+ d -- ok!
                     , TMax (kl:>l)
                     , kr:>r <+ nt:>vt
                     )
@@ -222,36 +222,21 @@ instance (NTAdd (kr:>r) (nt:>vt), NTMax (kl:>l)
     => NTAddB "gr-al-odd" ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
   where
     type TAB "gr-al-odd" (k:>(kl:>l,nt:>vt,kr:>r)) d
-        = (k+1) :>  ( kl:>l <+ d <\ TName (TMax (kl:>l))
+        = (k+1) :>  ( kl:>l <+ d <\ TName (TMax (kl:>l)) -- no problem!
                     , TMax (kl:>l)
                     , kr:>r <+ nt:>vt
                     )
     nab _ (V (l,t,r)) d  = V (l <+ d <\ mn, getNTMax l, r <+ t )
       where
         mn = Proxy :: Proxy (TName (TMax (kl :> l)))
-{-
-instance (NTAdd (kr:>r) (nt:>vt), NTDel (kl:>l<+d) (TName (TMax (kl:>l<+d)))
-        , NTAdd (kl:>l) d, NTMax (kl:>l<+d))
-    => NTAddB 3 ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
-  where
-    type TAB 3 (k:>(kl:>l,nt:>vt,kr:>r)) d
-        = (k+1) :>  ( kl:>l <+ d <\ TName (TMax (kl:>l <+ d))
-                    , TMax (kl:>l <+ d)
-                    , kr:>r <+ nt:>vt
-                    )
-    nab _ (V (l,t,r)) d  = V (l1<\mn,mnv,r<+t)
-      where
-        l1 = l<+d
-        mnv = getNTMax l1
-        mn = Proxy :: Proxy (TName (TMax (kl:>l<+d)))
--}
+
 -- instance NTDel: base
 instance NTDel (1:>(0:>(),n:>v,0:>())) n where
     type (1:>(0:>(),n:>v,0:>())) <\ n = 0:>()
     _ <\ _ = V ()
 
 -- instance NTDelB, NTDel: recursive
-type CDel kl kr n nt
+type CDel kl l kr r n nt
     = If (CmpNat kr kl == LT)
         -- reduce left
         (If (CmpSymbol n nt == GT) 3 {- del right -}
@@ -262,12 +247,12 @@ type CDel kl kr n nt
             (If (CmpSymbol n nt == EQ) 5 {- del top -} 4 {- del left -})
         )
 
-instance (NTDelB (CDel kl kr n nt) (k:>(kl:>(ll,lt,lr),nt:>vt,kr:>r)) n)
+instance (NTDelB (CDel kl (ll,lt,lr) kr r n nt) (k:>(kl:>(ll,lt,lr),nt:>vt,kr:>r)) n)
     => NTDel (k:>(kl:>(ll,lt,lr),nt:>vt,kr:>r)) n
   where
     type (k:>(kl:>(ll,lt,lr),nt:>vt,kr:>r)) <\ n
-        = TDB (CDel kl kr n nt) (k:>(kl:>(ll,lt,lr),nt:>vt,kr:>r)) n
-    (<\) = ndb (Proxy :: Proxy (CDel kl kr n nt))
+        = TDB (CDel kl (ll,lt,lr) kr r n nt) (k:>(kl:>(ll,lt,lr),nt:>vt,kr:>r)) n
+    (<\) = ndb (Proxy :: Proxy (CDel kl (ll,lt,lr) kr r n nt))
 
 instance (NTDel l n) => NTDelB 1 ((k::Nat):>(l,t,r)) n where
     type TDB 1 ((k::Nat):>(l,t,r)) n = (k-1):>(l<\n,t,r)

@@ -11,15 +11,18 @@
 {-# LANGUAGE RankNTypes #-}
 
 module NamedBTree
-    ( (<+)
-    , (<\)
-    -- , NTAdd(..)
-    -- , NTDel(..)
+    -- ( (<+)
+    -- , (<\)
+    ( NTAdd(..)
+    , NTDel(..)
     , NTMin(..)
     , NTMax(..)
     , TName
     , TMin
     , TMax
+    , type (<+)
+    , type (<\)
+    , (:>)(..)
     ) where
 import Data.Typeable
 import GHC.TypeLits
