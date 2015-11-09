@@ -15,10 +15,10 @@
 
 module NamedBTree2
     ( NTMin(..)
-    -- , (<+)
+    , (:>)(..)
     -- , (<\)
-    -- , NTAdd(..)
-    -- , NTDel(..)
+    , NTAdd(..)
+    , NTDel(..)
     , NTMax(..)
     , TName
     -- , TMin
@@ -47,6 +47,17 @@ class NTMax a where
 type family TName a :: Symbol where
     TName (n:>v) = n
 
+type family IsEven (k::Nat) :: Bool where
+    IsEven 0 = True
+    IsEven 1 = False
+    IsEven 2 = True
+    IsEven 3 = False
+    IsEven 4 = True
+    IsEven 5 = False
+    IsEven 6 = True
+    IsEven 7 = False
+    IsEven k = IsEven (k-8)
+
 -- instances ---
 
 -- NTMin, NTMax: base
@@ -58,6 +69,15 @@ instance NTMax (k:>(l,t,kr:>())) where
     type TMax (k:>(l,t,kt:>())) = t
     getNTMax (V (_,t,_)) = t
 
+{-
+instance NTMin (0:>()) where
+    type TMin (0:>()) = ()
+    getNTMin (V ()) = ()
+
+instance NTMax (0:>()) where
+    type TMax (0:>()) = ()
+    getNTMax (V ()) = ()
+-}
 -- NTMin, NTMax: recursive
 instance (NTMin (kl:>(ll,lt,lr))) => NTMin (k:>(kl:>(ll,lt,lr),b,c)) where
     type TMin (k:>(kl:>(ll,lt,lr),b,c)) = TMin (kl:>(ll,lt,lr))
@@ -75,7 +95,7 @@ class NTDel a n where
     type a <\ n
     (<\) :: a -> Proxy n -> a <\ n
 
-class NTAddB (c::Nat) a d where
+class NTAddB (c::Symbol) a d where
     type TAB c a d
     nab :: Proxy c -> a -> d -> TAB c a d
 
@@ -93,46 +113,126 @@ instance NTAdd (0:>()) (n:>v) where
     (V ()) <+ v = V (V (), v, V ())
 
 --instance NtAddB and NTAdd: recursive
-type CAdd kl kr n nt
+type CAdd kl l kr r n nt
     = If (CmpNat kl kr == GT)
         -- grow right
-        (If (CmpSymbol n nt == GT) 4 {- add right -} 3 {- add left -})
+        (If (CmpSymbol n nt == GT)
+            -- add right
+            "gr-ar"
+            -- add left
+            (If (kl == 0 || CmpSymbol (TName (TMax (kl:>l))) n == LT)
+                "gr-al-top"
+                (If (IsEven kl) "gr-al-even" "gr-al-odd")
+            )
+        )
         -- grow left
-        (If (CmpSymbol n nt == GT) 2 {- add right -} 1 {- add left -})
+        (If (CmpSymbol n nt == GT)
+            -- add right
+            (If (kr == 0 || CmpSymbol (TName (TMin (kr:>r))) n == GT)
+                "gl-ar-top"
+                (If (IsEven kr) "gl-ar-even" "gl-ar-odd")
+            )
+            -- add left
+            "gl-al"
+        )
 
-instance (NTAddB (CAdd kl kr n nt) (k:>(kl:>l,nt:>vt,kr:>r)) (n:>v))
+instance (NTAddB (CAdd kl l kr r n nt) (k:>(kl:>l,nt:>vt,kr:>r)) (n:>v))
     => NTAdd (k:>(kl:>l,nt:>vt,kr:>r)) (n:>v)
   where
     type (k:>(kl:>l,nt:>vt,kr:>r)) <+ (n:>v)
-        = TAB (CAdd kl kr n nt) (k:>(kl:>l,nt:>vt,kr:>r)) (n:>v)
-    (<+) = nab (Proxy :: Proxy (CAdd kl kr n nt))
+        = TAB (CAdd kl l kr r n nt) (k:>(kl:>l,nt:>vt,kr:>r)) (n:>v)
+    (<+) = nab (Proxy :: Proxy (CAdd kl l kr r n nt))
 
-instance (NTAdd l d) => NTAddB 1 ((k::Nat):>(l,t,r)) d where
-    type TAB 1 (k:>(l,t,r)) d = (k+1):>(l<+d,t,r)
+instance (NTAdd l d) => NTAddB "gl-al" ((k::Nat):>(l,t,r)) d where
+    type TAB "gl-al" (k:>(l,t,r)) d = (k+1):>(l<+d,t,r)
     nab _ (V (l,t,r)) d  = V (l<+d,t,r)
 
-instance (NTAdd r d) => NTAddB 4 ((k::Nat):>(l,t,r)) d where
-    type TAB 4 (k:>(l,t,r)) d = (k+1):>(l,t,r<+d)
+instance (NTAdd r d) => NTAddB "gr-ar" ((k::Nat):>(l,t,r)) d where
+    type TAB "gr-ar" (k:>(l,t,r)) d = (k+1):>(l,t,r<+d)
     nab _ (V (l,t,r)) d  = V (l,t,r<+d)
 
-instance (NTAdd (kl:>l) (nt:>vt), NTDel (kr:>r<+d) (TName (TMin (kr:>r<+d)))
-        , NTAdd (kr:>r) d, NTMin (kr:>r<+d))
-    => NTAddB 2 ((k::Nat):>(kl:>l,nt:>vt,kr:>r)) d
+instance (NTAdd (kl:>l) (nt:>vt))
+    => NTAddB "gl-ar-top" ((k::Nat):>((kl):>l,nt:>vt,(kr):>r)) d
   where
-    type TAB 2 (k:>(kl:>l,nt:>vt,kr:>r)) d
+    type TAB "gl-ar-top" (k:>(kl:>l,nt:>vt,kr:>r)) d
         = (k+1) :>  ( kl:>l <+ nt:>vt
-                    , TMin (kr:>r <+ d)
-                    , kr:>r <+ d <\ TName (TMin (kr:>r <+ d))
+                    , d
+                    , kr:>r
                     )
-    nab _ (V (l,t,r)) d  = V (l<+t,mnv,r1<\mn)
-      where
-        r1 = r<+d
-        mnv = getNTMin r1
-        mn = Proxy :: Proxy (TName (TMin (kr:>r<+d)))
+    nab _ (V (l,t,r)) d  = V (l<+t,d,r)
 
+instance (NTAdd (kl:>l) (nt:>vt), NTMin (kr:>r)
+        , NTAdd (kr:>r) d
+        , NTDel (kr:>r <+ d) (TName (TMin (kr:>r)))
+        )
+    => NTAddB "gl-ar-even" ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
+  where
+    type TAB "gl-ar-even" (k:>(kl:>l,nt:>vt,kr:>r)) d
+        = (k+1) :>  ( kl:>l <+ nt:>vt
+                    , TMin (kr:>r)
+                    , kr:>r <+ d <\ TName (TMin (kr :> r))
+                    )
+    nab _ (V (l,t,r)) d  = V (l<+t, getNTMin r, r <+ d <\mn )
+      where
+        mn = Proxy :: Proxy (TName (TMin (kr :> r)))
+
+instance (NTAdd (kl:>l) (nt:>vt), NTMin (kr:>r)
+        , NTDel (kr:>r) (TName (TMin (kr :> r)))
+        , NTAdd (kr:>r <\ TName (TMin (kr :> r))) d
+        )
+    => NTAddB "gl-ar-odd" ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
+  where
+    type TAB "gl-ar-odd" (k:>(kl:>l,nt:>vt,kr:>r)) d
+        = (k+1) :>  ( kl:>l <+ nt:>vt
+                    , TMin (kr:>r)
+                    , kr:>r <\ TName (TMin (kr:>r)) <+ d
+                    )
+    nab _ (V (l,t,r)) d  = V (l<+t, getNTMin r, r <\ mn <+ d)
+      where
+        mn = Proxy :: Proxy (TName (TMin (kr :> r)))
+
+instance (NTAdd (kr:>r) (nt:>vt))
+    => NTAddB "gr-al-top" ((k::Nat):>((kl):>l,nt:>vt,(kr):>r)) d
+  where
+    type TAB "gr-al-top" (k:>(kl:>l,nt:>vt,kr:>r)) d
+        = (k+1) :>  ( kl:>l
+                    , d
+                    , kr:>r <+ nt:>vt
+                    )
+    nab _ (V (l,t,r)) d  = V (l,d,r<+t)
+
+instance (NTAdd (kr:>r) (nt:>vt), NTMax (kl:>l)
+        , NTDel (kl:>l) (TName (TMax (kl:>l)))
+        , NTAdd (kl:>l <\ TName (TMax (kl :> l))) d)
+    => NTAddB "gr-al-even" ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
+  where
+    type TAB "gr-al-even" (k:>(kl:>l,nt:>vt,kr:>r)) d
+        = (k+1) :>  ( kl:>l <\ TName (TMax (kl:>l)) <+ d
+                    , TMax (kl:>l)
+                    , kr:>r <+ nt:>vt
+                    )
+    nab _ (V (l,t,r)) d  = V (l <\ mn <+ d, getNTMax l, r <+ t )
+      where
+        mn = Proxy :: Proxy (TName (TMax (kl :> l)))
+
+instance (NTAdd (kr:>r) (nt:>vt), NTMax (kl:>l)
+        , NTAdd (kl:>l) d
+        , NTDel (kl:>l<+d) (TName (TMax (kl:>l)))
+        )
+    => NTAddB "gr-al-odd" ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
+  where
+    type TAB "gr-al-odd" (k:>(kl:>l,nt:>vt,kr:>r)) d
+        = (k+1) :>  ( kl:>l <+ d <\ TName (TMax (kl:>l))
+                    , TMax (kl:>l)
+                    , kr:>r <+ nt:>vt
+                    )
+    nab _ (V (l,t,r)) d  = V (l <+ d <\ mn, getNTMax l, r <+ t )
+      where
+        mn = Proxy :: Proxy (TName (TMax (kl :> l)))
+{-
 instance (NTAdd (kr:>r) (nt:>vt), NTDel (kl:>l<+d) (TName (TMax (kl:>l<+d)))
         , NTAdd (kl:>l) d, NTMax (kl:>l<+d))
-    => NTAddB 3 ((k::Nat):>(kl:>l,nt:>vt,kr:>r)) d
+    => NTAddB 3 ((k::Nat):>((kl::Nat):>l,nt:>vt,(kr::Nat):>r)) d
   where
     type TAB 3 (k:>(kl:>l,nt:>vt,kr:>r)) d
         = (k+1) :>  ( kl:>l <+ d <\ TName (TMax (kl:>l <+ d))
@@ -144,7 +244,7 @@ instance (NTAdd (kr:>r) (nt:>vt), NTDel (kl:>l<+d) (TName (TMax (kl:>l<+d)))
         l1 = l<+d
         mnv = getNTMax l1
         mn = Proxy :: Proxy (TName (TMax (kl:>l<+d)))
-
+-}
 -- instance NTDel: base
 instance NTDel (1:>(0:>(),n:>v,0:>())) n where
     type (1:>(0:>(),n:>v,0:>())) <\ n = 0:>()
@@ -208,7 +308,6 @@ instance (NTDel r (TName (TMin r)), NTMin r, NTDel l n, NTAdd (l<\n) t)
       where
         mnv = getNTMin r
         mn = Proxy :: Proxy (TName (TMin r))
-
 -- tests ---
 type T1  = ()  <+ "1" :>Int
 type T2  = T1  <+ "2" :>Int
@@ -236,6 +335,7 @@ type T23 = T22 <+ "23":>Int
 type T24 = T23 <+ "24":>Int
 {-
 -}
+{-
 test10  = ()    <+ (V 1 :: "1":>Int)
                 <+ (V 2 :: "2":>Int)
                 <+ (V 3 :: "3":>Int)
@@ -271,8 +371,9 @@ test10  = ()    <+ (V 1 :: "1":>Int)
                 <+ "13":>Int
                 -}
                 -- <+ "14":>Int
-{-
 -}
+{-
+
 test1 = ()       <+ (V 1 :: "1":>Int)   :: T1
 test2  = test1   <+ (V 2 :: "2":>Int)   :: T2
 test3  = test2   <+ (V 3 :: "3":>Int)   :: T3
@@ -280,7 +381,6 @@ test4  = test3   <+ (V 4 :: "4":>Int)   :: T4
 test5  = test4   <+ (V 5 :: "5":>Int)   :: T5
 test6  = test5   <+ (V 6 :: "6":>Int)   :: T6
 test7  = test6   <+ (V 7 :: "7":>Int)   :: T7
-{-
 test8  = test7   <+ (V 8 :: "8":>Int)   :: T8
 test9  = test8   <+ (V 9 :: "9":>Int)   :: T9
 test10 = test9   <+ (V 10 :: "10":>Int) :: T10
@@ -321,7 +421,13 @@ f19 a = a <+ (V 19 :: "19":>Int)
 f20 a = a <+ (V 20 :: "20":>Int)
 f21 a = a <+ (V 21 :: "21":>Int)
 
-
+f1_2 a = f2.f1 $ a
+f1_10 a = f10.f9.f8.f7.f6.f5.f4.f3.f2.f1 $ a
+f1_20 a = f20.f19.f18.f17.f16.f15.f14.f13.f12.f11.f1_10 $ a
+f1_20' a = (f20.f19.f18.f17.f16.f15.f14.f13.f12.f11).f1_10 $ a
+{-
+-}
+{-
 isTest10 = test10 ==
         V   ( V ( V ( V (V (),V 0,V ())
                     , V 1
@@ -347,3 +453,4 @@ isTestF = g1 () == g2 ()
   where
     g1 = f3.f5.f11.f13.f1.f2.f4.f6.f15
     g2= (f3.f5).f13.f11.f15.f6.f4.f1.f2
+-}

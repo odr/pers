@@ -48,6 +48,11 @@ class NTMax a nv | a -> nv where
 type family TName a where
     TName (n:>v) = n
 
+type family IsEven (k::Nat) :: Bool where
+    IsEven 0 = True
+    IsEven 1 = False
+    IsEven k = IsEven (k-2)
+
 type family TMin a where
     TMin (1:>(0:>(),b,c))   = b
     TMin (k:>(a,b,c))       = TMin a
@@ -301,6 +306,7 @@ test1 = ()       <+ (V 1 :: "1":>Int)   :: T1
 test2  = test1   <+ (V 2 :: "2":>Int)   :: T2
 test3  = test2   <+ (V 3 :: "3":>Int)   :: T3
 test4  = test3   <+ (V 4 :: "4":>Int)   :: T4
+{-
 test5  = test4   <+ (V 5 :: "5":>Int)   :: T5
 test6  = test5   <+ (V 6 :: "6":>Int)   :: T6
 test7  = test6   <+ (V 7 :: "7":>Int)   :: T7
@@ -308,7 +314,6 @@ test8  = test7   <+ (V 8 :: "8":>Int)   :: T8
 test9  = test8   <+ (V 9 :: "9":>Int)   :: T9
 test10 = test9   <+ (V 10 :: "10":>Int) :: T10
 test11 = test10  <+ (V 11 :: "11":>Int) :: T11
-{-
 test12 = test11  <+ (V 12 :: "12":>Int) :: T12
 test13 = test12  <+ (V 13 :: "13":>Int) :: T13
 test14 = test13  <+ (V 14 :: "14":>Int) :: T14
