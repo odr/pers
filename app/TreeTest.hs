@@ -39,7 +39,6 @@ run = do
         -- $ f a1 a2 a3 a4 . f a5 a6 a7 a8 . f a9 a10 a11 a12 . f a13 a14 a15 a16 $ () -- 84s --- 21.1
 
 f a b c d = (<+a) . (<+b) . (<+c) . (<+d)
--- x = f a1 a2 a3 a4 . f a5 a6 a7 a8 $ ()
 
 {-
 t1 = ()       <+ a1
