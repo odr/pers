@@ -22,18 +22,16 @@ module NamedBTree
     , TMax
     , type (<+)
     , type (<\)
-    , (:>)(..)
+    -- , (:>)(..)
     ) where
 import Data.Typeable
 import GHC.TypeLits
 import Data.Type.Bool
 import Data.Type.Equality
+import Fields((:>)(..))
 
-infixr 9 :>
 infixl 6 <+
 infixl 6 <\
-
-newtype s:>val = V val deriving (Typeable, Show, Eq, Ord)
 
 -- interface: classes -----
 class NTAdd a d b | a d -> b where
