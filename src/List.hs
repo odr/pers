@@ -24,12 +24,12 @@ instance ListCons ((s::Symbol):>a) () where
     type (s:>a) +> () = (s:>a,())
     (+>) = (,)
 
-instance (ListConsC (True{-CmpSymbol sa sb == LT-}) (sa:>a) (sb:>b,c))
-    => ListCons (sa:>a) (sb:>b,c)
+instance (ListConsC (CmpSymbol sa sb == LT) (sa:>a) (sb:>b,c))
+    => ListCons ((sa::Symbol):>a) ((sb::Symbol):>b,c)
   where
     type (sa:>a) +> (sb:>b,c)
-        = TLC (True{-CmpSymbol sa sb == LT-}) (sa:>a) (sb:>b,c)
-    (+>) = lcc (Proxy :: Proxy (True{-CmpSymbol sa sb == LT-}))
+        = TLC (CmpSymbol sa sb == LT) (sa:>a) (sb:>b,c)
+    (+>) = lcc (Proxy :: Proxy (CmpSymbol sa sb == LT))
 
 class ListConsC (o::Bool) a b where
     type TLC o a b
