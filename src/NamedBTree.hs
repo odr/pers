@@ -54,7 +54,13 @@ type family TName a where
 type family IsEven (k::Nat) :: Bool where
     IsEven 0 = True
     IsEven 1 = False
-    IsEven k = IsEven (k-2)
+    IsEven 2 = True
+    IsEven 3 = False
+    IsEven 4 = True
+    IsEven 5 = False
+    IsEven 6 = True
+    IsEven 7 = False
+    IsEven k = IsEven (k-8)
 
 type family TMin a where
     TMin (1:>(0:>(),b,c))   = b

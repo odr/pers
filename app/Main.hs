@@ -1,51 +1,465 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Main where
 
-import NamedBTree
+import NamedBTree2
+import List
+import Fields((:>)(..))
 
 main :: IO ()
-main = print
-    -- TF - FD
-    -- test7 defined ---
-    -- test7 -- 7s
-    -- (test7 ::T7) -- 10s
-    -- (f1_7 ()) -- 16s
-    -- ((f1_7 $ ()) :: T7) -- 25s
+main = do
+    print
+        -- TF (Add modified) - FD - old TF
+        -- test7 defined ---
+        -- test7 -- 7s
+        -- (test7 ::T7) -- 10s
+        -- (f1_7 ()) -- 16s
+        -- ((f1_7 $ ()) :: T7) -- 25s
 
-    -- test11 defined ---
-    -- test7 -- 12s
-    -- test11 -- 13s
-    -- (test4::T4) -- 11s - 3.5s
-    -- (test5 :: T5) -- 12s
-    -- (test6 :: T6) -- 12s
-    -- (test7 :: T7) -- 14s - 7s
-    -- (test8 ::T8) -- 28s, no memory lost - 8s
-    (test11 ::T11) -- ? - 17s
+        -- test11 defined ---
+        -- test7 -- 12s
+        -- test11 -- 13s
+        -- (test4::T4) -- 11s - 3.5s - 25s
+        -- (test5 :: T5) -- 12s - ? - 24s
+        -- (test6 :: T6) -- 12s
+        -- (test7 :: T7) -- 14s - 7s - 25 s
+        -- (test11 ::T11) -- ? - 17s - 2m40s
+        (test3 ::T3) -- 28s, no memory lost - 8s - 34 s
+    print
+        -- (l10 :: L10)
+        l10
 
-type T1  = ()  <+ "1" :>Int
-type T2  = T1  <+ "2" :>Int
-type T3  = T2  <+ "3" :>Int
-type T4  = T3  <+ "4" :>Int
-type T5  = T4  <+ "5" :>Int
-type T6  = T5  <+ "6" :>Int
-type T7  = T6  <+ "7" :>Int
-type T8  = T7  <+ "8" :>Int
-type T9  = T8  <+ "9" :>Int
-type T10 = T9  <+ "10":>Int
-type T11 = T10 <+ "11":>Int
-type T12 = T11 <+ "12":>Int
-type T13 = T12 <+ "13":>Int
-type T14 = T13 <+ "14":>Int
-type T15 = T14 <+ "15":>Int
-type T16 = T15 <+ "16":>Int
-type T17 = T16 <+ "17":>Int
-type T18 = T17 <+ "18":>Int
-type T19 = T18 <+ "19":>Int
-type T20 = T19 <+ "20":>Int
-type T21 = T20 <+ "21":>Int
-type T22 = T21 <+ "22":>Int
-type T23 = T22 <+ "23":>Int
-type T24 = T23 <+ "24":>Int
+a1 = V 1 :: "1" :>Int
+a2 = V 2 :: "2" :>Int
+a3 = V 3 :: "3" :>Int
+a4 = V 4 :: "4" :>Int
+a5 = V 5 :: "5" :>Int
+a6 = V 6 :: "6" :>Int
+a7 = V 7 :: "7" :>Int
+a8 = V 8 :: "8" :>Int
+a9 = V 9 :: "9" :>Int
+a10 = V 10 :: "10" :>Int
+a11 = V 11 :: "11" :>Int
+a12 = V 12 :: "12" :>Int
+a13 = V 13 :: "13" :>Int
+a14 = V 14 :: "14" :>Int
+a15 = V 15 :: "15" :>Int
+a16 = V 16 :: "16" :>Int
+a17 = V 17 :: "17" :>Int
+a18 = V 18 :: "18" :>Int
+a19 = V 19 :: "19" :>Int
+a20 = V 20 :: "20" :>Int
+a21 = V 21 :: "21" :>Int
+a22 = V 22 :: "22" :>Int
+a23 = V 23 :: "23" :>Int
+a24 = V 24 :: "24" :>Int
+a25 = V 25 :: "25" :>Int
+a26 = V 26 :: "26" :>Int
+a27 = V 27 :: "27" :>Int
+a28 = V 28 :: "28" :>Int
+a29 = V 29 :: "29" :>Int
+a30 = V 30 :: "30" :>Int
+a31 = V 31 :: "31" :>Int
+a32 = V 32 :: "32" :>Int
+a33 = V 33 :: "33" :>Int
+a34 = V 34 :: "34" :>Int
+a35 = V 35 :: "35" :>Int
+a36 = V 36 :: "36" :>Int
+a37 = V 37 :: "37" :>Int
+a38 = V 38 :: "38" :>Int
+a39 = V 39 :: "39" :>Int
+a40 = V 40 :: "40" :>Int
+a41 = V 41 :: "41" :>Int
+a42 = V 42 :: "42" :>Int
+a43 = V 43 :: "43" :>Int
+a44 = V 44 :: "44" :>Int
+a45 = V 45 :: "45" :>Int
+a46 = V 46 :: "46" :>Int
+a47 = V 47 :: "47" :>Int
+a48 = V 48 :: "48" :>Int
+a49 = V 49 :: "49" :>Int
+a50 = V 50 :: "50" :>Int
+{-
+a51 = V 51 :: "51" :>Int
+a52 = V 52 :: "52" :>Int
+a53 = V 53 :: "53" :>Int
+a54 = V 54 :: "54" :>Int
+a55 = V 55 :: "55" :>Int
+a56 = V 56 :: "56" :>Int
+a57 = V 57 :: "57" :>Int
+a58 = V 58 :: "58" :>Int
+a59 = V 59 :: "59" :>Int
+a60 = V 60 :: "60" :>Int
+a61 = V 61 :: "61" :>Int
+a62 = V 62 :: "62" :>Int
+a63 = V 63 :: "63" :>Int
+a64 = V 64 :: "64" :>Int
+a65 = V 65 :: "65" :>Int
+a66 = V 66 :: "66" :>Int
+a67 = V 67 :: "67" :>Int
+a68 = V 68 :: "68" :>Int
+a69 = V 69 :: "69" :>Int
+a70 = V 70 :: "70" :>Int
+a71 = V 71 :: "71" :>Int
+a72 = V 72 :: "72" :>Int
+a73 = V 73 :: "73" :>Int
+a74 = V 74 :: "74" :>Int
+a75 = V 75 :: "75" :>Int
+a76 = V 76 :: "76" :>Int
+a77 = V 77 :: "77" :>Int
+a78 = V 78 :: "78" :>Int
+a79 = V 79 :: "79" :>Int
+a80 = V 80 :: "80" :>Int
+a81 = V 81 :: "81" :>Int
+a82 = V 82 :: "82" :>Int
+a83 = V 83 :: "83" :>Int
+a84 = V 84 :: "84" :>Int
+a85 = V 85 :: "85" :>Int
+a86 = V 86 :: "86" :>Int
+a87 = V 87 :: "87" :>Int
+a88 = V 88 :: "88" :>Int
+a89 = V 89 :: "89" :>Int
+a90 = V 90 :: "90" :>Int
+a91 = V 91 :: "91" :>Int
+a92 = V 92 :: "92" :>Int
+a93 = V 93 :: "93" :>Int
+a94 = V 94 :: "94" :>Int
+a95 = V 95 :: "95" :>Int
+a96 = V 96 :: "96" :>Int
+a97 = V 97 :: "97" :>Int
+a98 = V 98 :: "98" :>Int
+a99 = V 99 :: "99" :>Int
+-}
+
+type A1  = "1" :>Int
+type A2  = "2" :>Int
+type A3  = "3" :>Int
+type A4  = "4" :>Int
+type A5  = "5" :>Int
+type A6  = "6" :>Int
+type A7  = "7" :>Int
+type A8  = "8" :>Int
+type A9  = "9" :>Int
+type A10 = "10" :>Int
+type A11 = "11" :>Int
+type A12 = "12" :>Int
+type A13 = "13" :>Int
+type A14 = "14" :>Int
+type A15 = "15" :>Int
+type A16 = "16" :>Int
+type A17 = "17" :>Int
+type A18 = "18" :>Int
+type A19 = "19" :>Int
+type A20 = "20" :>Int
+type A21 = "21" :>Int
+type A22 = "22" :>Int
+type A23 = "23" :>Int
+type A24 = "24" :>Int
+type A25 = "25" :>Int
+type A26 = "26" :>Int
+type A27 = "27" :>Int
+type A28 = "28" :>Int
+type A29 = "29" :>Int
+type A30 = "30" :>Int
+type A31 = "31" :>Int
+type A32 = "32" :>Int
+type A33 = "33" :>Int
+type A34 = "34" :>Int
+type A35 = "35" :>Int
+type A36 = "36" :>Int
+type A37 = "37" :>Int
+type A38 = "38" :>Int
+type A39 = "39" :>Int
+type A40 = "40" :>Int
+type A41 = "41" :>Int
+type A42 = "42" :>Int
+type A43 = "43" :>Int
+type A44 = "44" :>Int
+type A45 = "45" :>Int
+type A46 = "46" :>Int
+type A47 = "47" :>Int
+type A48 = "48" :>Int
+type A49 = "49" :>Int
+type A50 = "50" :>Int
+{-
+type A51 = "51" :>Int
+type A52 = "52" :>Int
+type A53 = "53" :>Int
+type A54 = "54" :>Int
+type A55 = "55" :>Int
+type A56 = "56" :>Int
+type A57 = "57" :>Int
+type A58 = "58" :>Int
+type A59 = "59" :>Int
+type A60 = "60" :>Int
+type A61 = "61" :>Int
+type A62 = "62" :>Int
+type A63 = "63" :>Int
+type A64 = "64" :>Int
+type A65 = "65" :>Int
+type A66 = "66" :>Int
+type A67 = "67" :>Int
+type A68 = "68" :>Int
+type A69 = "69" :>Int
+type A70 = "70" :>Int
+type A71 = "71" :>Int
+type A72 = "72" :>Int
+type A73 = "73" :>Int
+type A74 = "74" :>Int
+type A75 = "75" :>Int
+type A76 = "76" :>Int
+type A77 = "77" :>Int
+type A78 = "78" :>Int
+type A79 = "79" :>Int
+type A80 = "80" :>Int
+type A81 = "81" :>Int
+type A82 = "82" :>Int
+type A83 = "83" :>Int
+type A84 = "84" :>Int
+type A85 = "85" :>Int
+type A86 = "86" :>Int
+type A87 = "87" :>Int
+type A88 = "88" :>Int
+type A89 = "89" :>Int
+type A90 = "90" :>Int
+type A91 = "91" :>Int
+type A92 = "92" :>Int
+type A93 = "93" :>Int
+type A94 = "94" :>Int
+type A95 = "95" :>Int
+type A96 = "96" :>Int
+type A97 = "97" :>Int
+type A98 = "98" :>Int
+type A99 = "99" :>Int
+-}
+type L1 = A1 +> ()
+type L2 = A2 +> L1
+type L3 = A3 +> L2
+type L4 = A4 +> L3
+type L5 = A5 +> L4
+type L6 = A6 +> L5
+type L7 = A7 +> L6
+type L8 = A8 +> L7
+type L9 = A9 +> L8
+type L10 = A10 +> L9
+type L11 = A11 +> L10
+type L12 = A12 +> L11
+type L13 = A13 +> L12
+type L14 = A14 +> L13
+type L15 = A15 +> L14
+type L16 = A16 +> L15
+type L17 = A17 +> L16
+type L18 = A18 +> L17
+type L19 = A19 +> L18
+type L20 = A20 +> L19
+type L21 = A21 +> L20
+type L22 = A22 +> L21
+type L23 = A23 +> L22
+type L24 = A24 +> L23
+type L25 = A25 +> L24
+type L26 = A26 +> L25
+type L27 = A27 +> L26
+type L28 = A28 +> L27
+type L29 = A29 +> L28
+type L30 = A30 +> L29
+type L31 = A31 +> L30
+type L32 = A32 +> L31
+type L33 = A33 +> L32
+type L34 = A34 +> L33
+type L35 = A35 +> L34
+type L36 = A36 +> L35
+type L37 = A37 +> L36
+type L38 = A38 +> L37
+type L39 = A39 +> L38
+type L40 = A40 +> L39
+type L41 = A41 +> L40
+type L42 = A42 +> L41
+type L43 = A43 +> L42
+type L44 = A44 +> L43
+type L45 = A45 +> L44
+type L46 = A46 +> L45
+type L47 = A47 +> L46
+type L48 = A48 +> L47
+type L49 = A49 +> L48
+type L50 = A50 +> L49
+{-
+type L51 = A51 +> L50
+type L52 = A52 +> L51
+type L53 = A53 +> L52
+type L54 = A54 +> L53
+type L55 = A55 +> L54
+type L56 = A56 +> L55
+type L57 = A57 +> L56
+type L58 = A58 +> L57
+type L59 = A59 +> L58
+type L60 = A60 +> L59
+type L61 = A61 +> L60
+type L62 = A62 +> L61
+type L63 = A63 +> L62
+type L64 = A64 +> L63
+type L65 = A65 +> L64
+type L66 = A66 +> L65
+type L67 = A67 +> L66
+type L68 = A68 +> L67
+type L69 = A69 +> L68
+type L70 = A70 +> L69
+type L71 = A71 +> L70
+type L72 = A72 +> L71
+type L73 = A73 +> L72
+type L74 = A74 +> L73
+type L75 = A75 +> L74
+type L76 = A76 +> L75
+type L77 = A77 +> L76
+type L78 = A78 +> L77
+type L79 = A79 +> L78
+type L80 = A80 +> L79
+type L81 = A81 +> L80
+type L82 = A82 +> L81
+type L83 = A83 +> L82
+type L84 = A84 +> L83
+type L85 = A85 +> L84
+type L86 = A86 +> L85
+type L87 = A87 +> L86
+type L88 = A88 +> L87
+type L89 = A89 +> L88
+type L90 = A90 +> L89
+type L91 = A91 +> L90
+type L92 = A92 +> L91
+type L93 = A93 +> L92
+type L94 = A94 +> L93
+type L95 = A95 +> L94
+type L96 = A96 +> L95
+type L97 = A97 +> L96
+type L98 = A98 +> L97
+type L99 = A99 +> L98
+-}
+
+l1 = a1 +> ()
+l2 = a2 +> l1
+l3 = a3 +> l2
+l4 = a4 +> l3
+l5 = a5 +> l4
+l6 = a6 +> l5
+l7 = a7 +> l6
+l8 = a8 +> l7
+l9 = a9 +> l8
+l10 = a10 +> l9
+l11 = a11 +> l10
+l12 = a12 +> l11
+l13 = a13 +> l12
+l14 = a14 +> l13
+l15 = a15 +> l14
+l16 = a16 +> l15
+l17 = a17 +> l16
+l18 = a18 +> l17
+l19 = a19 +> l18
+l20 = a20 +> l19
+{-
+l21 = a21 +> l20
+l22 = a22 +> l21
+l23 = a23 +> l22
+l24 = a24 +> l23
+l25 = a25 +> l24
+l26 = a26 +> l25
+l27 = a27 +> l26
+l28 = a28 +> l27
+l29 = a29 +> l28
+l30 = a30 +> l29
+l31 = a31 +> l30
+l32 = a32 +> l31
+l33 = a33 +> l32
+l34 = a34 +> l33
+l35 = a35 +> l34
+l36 = a36 +> l35
+l37 = a37 +> l36
+l38 = a38 +> l37
+l39 = a39 +> l38
+l40 = a40 +> l39
+l41 = a41 +> l40
+l42 = a42 +> l41
+l43 = a43 +> l42
+l44 = a44 +> l43
+l45 = a45 +> l44
+l46 = a46 +> l45
+l47 = a47 +> l46
+l48 = a48 +> l47
+l49 = a49 +> l48
+l50 = a50 +> l49
+l51 = a51 +> l50
+l52 = a52 +> l51
+l53 = a53 +> l52
+l54 = a54 +> l53
+l55 = a55 +> l54
+l56 = a56 +> l55
+l57 = a57 +> l56
+l58 = a58 +> l57
+l59 = a59 +> l58
+l60 = a60 +> l59
+l61 = a61 +> l60
+l62 = a62 +> l61
+
+l63 = a63 +> l62
+l64 = a64 +> l63
+l65 = a65 +> l64
+l66 = a66 +> l65
+l67 = a67 +> l66
+l68 = a68 +> l67
+l69 = a69 +> l68
+l70 = a70 +> l69
+l71 = a71 +> l70
+l72 = a72 +> l71
+l73 = a73 +> l72
+l74 = a74 +> l73
+l75 = a75 +> l74
+l76 = a76 +> l75
+l77 = a77 +> l76
+l78 = a78 +> l77
+l79 = a79 +> l78
+l80 = a80 +> l79
+l81 = a81 +> l80
+l82 = a82 +> l81
+l83 = a83 +> l82
+l84 = a84 +> l83
+l85 = a85 +> l84
+l86 = a86 +> l85
+l87 = a87 +> l86
+l88 = a88 +> l87
+l89 = a89 +> l88
+l90 = a90 +> l89
+l91 = a91 +> l90
+l92 = a92 +> l91
+l93 = a93 +> l92
+l94 = a94 +> l93
+l95 = a95 +> l94
+l96 = a96 +> l95
+l97 = a97 +> l96
+l98 = a98 +> l97
+l99 = a99 +> l98
+-}
+
+type T1  = ()  <+ A1
+type T2  = T1  <+ A2
+type T3  = T2  <+ A3
+type T4  = T3  <+ A4
+type T5  = T4  <+ A5
+type T6  = T5  <+ A6
+type T7  = T6  <+ A7
+type T8  = T7  <+ A8
+type T9  = T8  <+ A9
+type T10 = T9  <+ A10
+type T11 = T10 <+ A11
+type T12 = T11 <+ A12
+type T13 = T12 <+ A13
+type T14 = T13 <+ A14
+type T15 = T14 <+ A15
+type T16 = T15 <+ A16
+type T17 = T16 <+ A17
+type T18 = T17 <+ A18
+type T19 = T18 <+ A19
+type T20 = T19 <+ A20
+type T21 = T20 <+ A21
+type T22 = T21 <+ A22
+type T23 = T22 <+ A23
+type T24 = T23 <+ A24
 
 f1  a = a <+ (V  1 ::  "1":>Int)
 f2  a = a <+ (V  2 ::  "2":>Int)

@@ -11,7 +11,8 @@
 -- {-# LANGUAGE OverlappingInstances #-}
 
 module Fields
-    ( HasField(..)
+    ( (:>)(..)
+    , HasField(..)
     , Projection(..)
     ) where
 import Data.Typeable
@@ -19,7 +20,7 @@ import GHC.TypeLits
 import Data.Type.Bool
 import Data.Type.Equality
 
-newtype (s :: Symbol) :> val = V val deriving (Typeable, Show)
+newtype s :> val = V val deriving (Typeable, Show, Eq, Ord)
 infixr 9 :>
 
 class HasField name val a | a name -> val where

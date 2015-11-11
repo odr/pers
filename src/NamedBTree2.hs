@@ -24,16 +24,17 @@ module NamedBTree2
     -- , TMin
     -- , TMax
     ) where
+import Fields ((:>)(..))
 import Data.Typeable
 import GHC.TypeLits
 import Data.Type.Bool
 import Data.Type.Equality
 
-infixr 9 :>
+-- infixr 9 :>
 infixl 6 <+
 infixl 6 <\
 
-newtype s:>val = V val deriving (Typeable, Show, Eq, Ord)
+-- newtype s:>val = V val deriving (Typeable, Show, Eq, Ord)
 
 -- interface: classes -----
 class NTMin a where
