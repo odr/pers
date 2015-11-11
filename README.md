@@ -17,3 +17,32 @@ And I want to try something similar for Persistency.
 Another source I saw is [Record](github.com/nikita-volkov/record) library.
 
 ## Named Records
+
+I hoped to find decision with properties:
+* O(log n) time to get field from record by name
+* record construction independent from order of fields definitions
+* no TH preferrable, some TH possible
+* projections and joins are desirable
+
+I tried to implement it using "very-well balanced tree" (I don't know the right name) on type level. 
+This is a binary search (by name) tree with count of left items is the same or one more than on the right side (for each subtree).
+The problem is construction. I realized it with [FunDeps](https://github.com/odr/pers/blob/master/src/NamedBTree.hs) and  with [TF](https://github.com/odr/pers/blob/master/src/NamedBTree2.hs). 
+
+User should write 
+```haskell
+type Rec = () <+ "a":>Int <+ "b":>Char <+ "c":>String
+rec = () <+ (V "c" :: "c":>String) <+ (V 1 :: "a":>Int) <+ (V 'b' :: "b":>Char)
+```
+or
+```haskell
+rec = () <+ (V "c" :: "c":>String) <+ (V 1 :: "a":>Int) <+ (V 'b' :: "b":>Char) :: Rec
+```
+and got 
+```haskell
+rec = (((),V 1,()),V'b',((),V "c")) :: (((),"a":>Int,()),"b":>Char,((),"c":>String,()) 
+```
+(Constructions like `(V 1 :: "a" :> Int)` rather ugly. Any ideas are welcomed... Perhaps some TH?)
+
+But compile time for [user application](https://github.com/odr/pers/blob/master/app/Main.hs) is absolutely blocked this idea!
+
+I tried also to make a type-level sorted list but it is also too complicated for ghc.
