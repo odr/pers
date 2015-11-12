@@ -248,7 +248,7 @@ instance (NTMin (kl:>(ll,lt,lr)) ma) => NTMin (k:>(kl:>(ll,lt,lr),b,c)) ma where
 
 instance (NTMax (kr:>(rl,rt,rr)) mc) => NTMax (k:>(a,b,kr:>(rl,rt,rr))) mc where
     getNTMax (V (_,_,c)) = getNTMax c
-
+{-
 -- tests ---
 type T1  = ()  <+ "1" :>Int
 type T2  = T1  <+ "2" :>Int
@@ -381,4 +381,5 @@ isTestF = g1 () == g2 ()
   where
     g1 = f3.f5.f11.f13.f1.f2.f4.f6.f15
     g2= (f3.f5).f13.f11.f15.f6.f4.f1.f2
+-}
 -}
