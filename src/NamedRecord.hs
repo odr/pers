@@ -5,21 +5,32 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
-module NamedRecord where
+module NamedRecord
+    ( (:>)(..)
+    , type (<+)
+    -- , CNewRec(..)
+    , NewRec
+    , newRec
+    , toRec
+    , NamedRec
+    , proxyNamed
+    ) where
 
-import Data.Typeable
+import Data.Typeable(Proxy(..), Typeable(..))
 import GHC.TypeLits
 import Data.Type.Bool
 import Data.Type.Equality
-import Fields((:>)(..))
 import Data.Either(either, lefts)
 
+infixr 9 :>
 infixl 6 <+
 infixl 6 <\
+
+newtype s :> val = V val deriving (Typeable, Show, Eq, Ord)
 
 class CNamedRec a where
     type NamedRec a
@@ -30,6 +41,8 @@ instance CNamedRec (0:>()) where
 instance (CNamedRec a, CNamedRec c) => CNamedRec ((k::Nat):>(a,b,c)) where
     type NamedRec ((k::Nat):>(a,b,c)) = (NamedRec a, b, NamedRec c)
 
+proxyNamed :: a:>b -> Proxy a
+proxyNamed a = Proxy :: Proxy a
 
 type family TName a where
     TName (n:>v) = n
@@ -121,22 +134,4 @@ instance (CNewRec a, CNewRec c, KnownSymbol bn) => CNewRec (a, bn:>bv, c) where
         b1 = maybe (Left [bn]) (Right . V) mbv
         ls = concat $ lefts [a1] ++ lefts [b1] ++ lefts [c1]
 
-
-type family Person where
--- type
-    Person = NamedRec   (() <+ "name":>String
-                            <+ "age":>Int
-                            <+ "gender":>Bool
-                            <+ "year":>Int
-                            <+ "month":>Int
-                            <+ "day":>Int
-                        )
---type family NewPerson where
---    NewPerson = NewRec Person
-
-newPerson :: NewRec Person
-newPerson = newRec (Proxy :: Proxy Person)
-person :: NewRec Person -> Either [String] Person
-person = toRec
--- person = toRec newPerson :: Either [String] Person
 

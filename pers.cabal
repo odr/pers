@@ -20,6 +20,7 @@ library
                         , NamedBTree2
                         , SplitRec
                         , List
+                        , NamedRecord
   default-extensions:  TypeOperators
                         , DataKinds
   build-depends:       base >= 4.7 && < 5
@@ -31,6 +32,10 @@ library
 executable pers-exe
   hs-source-dirs:      app
   main-is:             Main.hs
+  other-modules:        TreeTest
+                        , ListTest
+                        , NamedRecordTest
+
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200
   default-extensions:  TypeOperators
                        , DataKinds

@@ -1,6 +1,6 @@
 module Main where
 
-import TreeTest(run)
+import NamedRecordTest(run)
 
 main :: IO ()
 main = run
