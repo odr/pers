@@ -3,12 +3,14 @@
 module NamedRecordTest where
 
 import NamedRecord
+-- import NamedRecord2
 import Data.Typeable(Proxy(..))
 
 
 type family Person where
 -- type
-    Person = NamedRec   (() <+ "name":>String
+    Person = NamedRec   (() <+ "name":>String   -- NamedRecord
+    -- Person =    (() <+ "name":>String        -- NamedRecord2
                             <+ "age":>Int
                             <+ "gender":>Bool
                             <+ "year":>Int

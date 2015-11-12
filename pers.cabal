@@ -21,6 +21,7 @@ library
                         , SplitRec
                         , List
                         , NamedRecord
+                        , NamedRecord2
   default-extensions:  TypeOperators
                         , DataKinds
   build-depends:       base >= 4.7 && < 5

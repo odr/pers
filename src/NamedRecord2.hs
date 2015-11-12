@@ -9,15 +9,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
-module NamedRecord
+module NamedRecord2
     ( (:>)(..)
     , type (<+)
     -- , CNewRec(..)
     , NewRec
     , newRec
     , toRec
-    , NamedRec
-    , proxyNamed
     ) where
 
 import Data.Typeable(Proxy(..), Typeable(..))
@@ -32,89 +30,80 @@ infixl 6 <\
 
 newtype s :> val = V val deriving (Typeable, Show, Eq, Ord)
 
-class CNamedRec a where
-    type NamedRec a
-
-instance CNamedRec (0:>()) where
-    type NamedRec (0:>()) = ()
-
-instance (CNamedRec a, CNamedRec c) => CNamedRec ((k::Nat):>(a,b,c)) where
-    type NamedRec ((k::Nat):>(a,b,c)) = (NamedRec a, b, NamedRec c)
-
-proxyNamed :: a:>b -> Proxy a
-proxyNamed a = Proxy :: Proxy a
-
 type family TName a where
     TName (n:>v) = n
 
+type family Cnt a :: Nat where
+    Cnt () = 0
+    Cnt (a,b,c) = 1 + Cnt a + Cnt c
+
 type family TMin a where
-    TMin (1:>(0:>(),b,c))   = b
-    TMin (k:>(a,b,c))       = TMin a
+    TMin ((),b,c)   = b
+    TMin (a,b,c)    = TMin a
 
 type family TMax a where
-    TMax (k:>(a,b,0:>()))   = b
-    TMax (k:>(a,b,c))       = TMax c
+    TMax (a,b,())   = b
+    TMax (a,b,c)    = TMax c
 
 type family a <+ b where
-    () <+ (n:>v) = (1:>(0:>(),n:>v,0:>()))
-    (0:>()) <+ (n:>v) = (1:>(0:>(),n:>v,0:>()))
-    (k:>(kl:>l,nt:>vt,kr:>r)) <+ (n:>v)
-        = (k+1) :> If (CmpNat kl kr == GT)
-            -- grow rightnewPerson
+    () <+ (n:>v) = ((),n:>v,())
+    (l,nt:>vt,r) <+ (n:>v)
+        = If (CmpNat (Cnt l) (Cnt r) == GT)
+            -- grow right
             (If (CmpSymbol n nt == GT)
                 -- add right 4
-                (kl:>l,nt:>vt,kr:>r <+ n:>v)
+                (l,nt:>vt,r <+ n:>v)
                 -- add left 3
-                ( kl:>l <+ n:>v <\ TName (TMax (kl:>l <+ n:>v))
-                , TMax (kl:>l <+ n:>v)
-                , kr:>r <+ nt:>vt
+                ( l <+ n:>v <\ TName (TMax (l <+ n:>v))
+                , TMax (l <+ n:>v)
+                , r <+ nt:>vt
                 )
             )
             -- grow left
             (If (CmpSymbol n nt == GT)
                 -- add right 2
-                ( kl:>l <+ nt:>vt
-                , TMin (kr:>r <+ n:>v)
-                , kr:>r <+ n:>v <\ TName (TMin (kr:>r <+ n:>v))
+                ( l <+ nt:>vt
+                , TMin (r <+ n:>v)
+                , r <+ n:>v <\ TName (TMin (r <+ n:>v))
                 )
                 -- add left 1
-                (kl:>l <+ n:>v, nt:>vt, kr:>r)
+                (l <+ n:>v, nt:>vt, r)
             )
 type family (a :: *) <\ (b :: Symbol) :: * where
-    (1:>(0:>(),n:>v,0:>())) <\ n = 0:>()
-    (k:>(kl:>l,nt:>vt,kr:>r)) <\ n
-        = (k-1) :> If (CmpNat kr kl == LT)
+    ((),n:>v,()) <\ n = ()
+    (l,nt:>vt,r) <\ n
+        = If (CmpNat (Cnt r) (Cnt l) == LT)
             -- reduce left
             (If (CmpSymbol n nt == GT)
                 -- del right 3
-                ( kl:>l <\ TName (TMax (kl:>l))
-                , TMax (kl:>l)
-                , kr:>r <\ n <+ nt:>vt
+                ( l <\ TName (TMax l)
+                , TMax l
+                , r <\ n <+ nt:>vt
                 )
                 (If (CmpSymbol n nt == EQ)
                     -- del top 2
-                    ( kl:>l <\ TName (TMax (kl:>l))
-                    , TMax (kl:>l)
-                    , kr:>r
+                    ( l <\ TName (TMax l)
+                    , TMax l
+                    , r
                     )
                     -- del left 1
-                    (kl:>l <\ n, nt:>vt, kr:>r)
+                    (l <\ n, nt:>vt, r)
                 )
             )
             -- reduce right
             (If (CmpSymbol n nt == GT)
                 -- del right 6
-                (kl:>l, nt:>vt, kr:>r <\ n)
+                (l, nt:>vt, r <\ n)
                 (If (CmpSymbol n nt == EQ)
                     -- del top 5
-                    ( kl:>l
-                    , TMax (kr:>r)
-                    , kr:>r <\ TName (TMax (kr:>r))
+                    ( l
+                    , TMax r
+                    , r <\ TName (TMax r)
                     )
                     -- del left 4
-                    ( kl:>l <\n <+ nt:>vt
-                    , TMax (kr:>r)
-                    , kr:>r <\ TName (TMax (kr:>r))
+                    ( l <\n <+ nt:>vt
+                    , TMax r
+                    , r <\ TName (TMax r)
                     )
                 )
             )
@@ -152,4 +141,14 @@ instance (CNewRec a, CNewRec c, KnownSymbol bn) => CNewRec (a, bn:>bv, c) where
         b1 = maybe (Left [bn]) (Right . V) mbv
         ls = concat $ lefts [a1] ++ lefts [b1] ++ lefts [c1]
 
-
+{-
+type family Person where
+-- type
+    Person = () <+ "name":>String
+                <+ "age":>Int
+                <+ "gender":>Bool
+                <+ "year":>Int
+                <+ "month":>Int
+                <+ "day":>Int
+                <+ "week":>Maybe Int
+-}
