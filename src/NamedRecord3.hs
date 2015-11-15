@@ -10,14 +10,16 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
-module NamedRecord2
-    ( (:>)(..)
+module NamedRecord3
+   {-
+   ( (:>)(..)
     , type (<+)
     -- , CNewRec(..)
     , NewRec
     , newRec
     , toRec
-    ) where
+    )
+    -} where
 
 import Data.Typeable(Proxy(..), Typeable(..))
 import GHC.TypeLits
@@ -30,30 +32,142 @@ infixl 6 <+
 infixl 6 <\
 
 newtype s :> val = V val deriving (Typeable, Show, Eq, Ord, Functor)
-
 type family TName a where
-    TName (n:>v) = n
+    TName ()        = ""
+    TName (n:>v)    = n
+proxyName :: s :> val -> Proxy s
+proxyName (a :: s :> val) = Proxy :: Proxy s
+proxyVal :: s :> val -> Proxy val
+proxyVal (a :: s :> val) = Proxy :: Proxy val
 
-type family Cnt a :: Nat where
-    Cnt () = 0
-    Cnt (a,b,c) = 1 + Cnt a + Cnt c
+data BTree a b c    = BTree { treeLeft :: !a, treeTop :: !b, treeRight :: !c }
+    deriving (Eq, Show, Typeable)
 
-type family TMin a where
-    TMin ((),b,c)   = b
-    TMin (a,b,c)    = TMin a
+proxyLeft  :: BTree a b c -> Proxy a
+proxyLeft (BTree a b c) = Proxy :: Proxy a
+proxyRight :: BTree a b c -> Proxy c
+proxyRight (BTree a b c) = Proxy :: Proxy c
 
-type family TMax a where
-    TMax (a,b,())   = b
-    TMax (a,b,c)    = TMax c
+class CBTree a where
+    type Cnt a :: Nat
+    type TMin a
+    type TMax a
+    type  (<+) a b
+    type  (<\) a (b::Symbol)
+    type TLift a (f :: * -> *)
+    newRec :: Proxy a -> TLift a Maybe
 
-type family a <+ b where
-    () <+ (n:>v) = ((),n:>v,())
-    (l,nt:>vt,r) <+ (n:>v)
+instance CBTree () where
+    type Cnt () = 0
+    type TMin () = ()
+    type TMax () = ()
+    type (<+) () ((n::Symbol) :> v) = BTree () (n:>v) ()
+    type (<\) () (b::Symbol) = ()
+    type TLift () f = ()
+    newRec _ = ()
+
+{-
+instance CBTree (BTree () ((nt::Symbol):>vt) ()) where
+    type Cnt  (BTree () (nt:>vt) ()) = 1
+    type TMin (BTree () (nt:>vt) ()) = nt:>vt
+    type TMax (BTree () (nt:>vt) ()) = nt:>vt
+    type (<+) (BTree () (nt:>vt) ()) ((n::Symbol) :> v)
+        = -- grow left
+            (If (CmpSymbol n nt == GT)
+                -- add right 2
+                ( BTree (nt:>vt) (n:>v) () )
+                -- add left 1
+                ( BTree (n:>v) (nt:>vt) () )
+            )
+    type  (<\) (BTree () (nt:>vt) ()) (nt::Symbol) = ()
+    type TLift (BTree l (nt:>vt) r) f = BTree (TLift l f) (nt:>f vt) (TLift r f)
+    newRec _ = BTree (newRec (Proxy :: Proxy l))
+                    (V Nothing :: nt :> Maybe vt)
+                    (newRec (Proxy :: Proxy r))
+-}
+
+instance (CBTree l, CBTree r) => CBTree (BTree l ((nt::Symbol):>vt) r) where
+    type Cnt  (BTree l (nt:>vt) r)
+        = 1 + Cnt l + Cnt r
+    type TMin (BTree l (nt:>vt) r)
+        = If (l == ()) (nt:>vt) (TMin l)
+    type TMax (BTree l (nt:>vt) r)
+        = If (r == ()) (nt:>vt) (TMax r)
+    type (<+) (BTree l (nt:>vt) r) ((n::Symbol) :> v)
         = If (CmpNat (Cnt l) (Cnt r) == GT)
             -- grow right
             (If (CmpSymbol n nt == GT)
                 -- add right 4
-                (l,nt:>vt,r <+ n:>v)
+                (BTree l (nt:>vt) (r <+ n:>v))
+                -- add left 3
+                ( BTree ( l <+ n:>v <\ TName (TMax (l <+ n:>v)) )
+                        ( TMax (l <+ n:>v) )
+                        ( r <+ nt:>vt )
+                )
+            )
+            -- grow left
+            (If (CmpSymbol n nt == GT)
+                -- add right 2
+                ( BTree (l <+ nt:>vt)
+                        (TMin (r <+ n:>v))
+                        (r <+ n:>v <\ TName (TMin (r <+ n:>v)))
+                )
+                -- add left 1
+                (BTree (l <+ n:>v) (nt:>vt) r)
+            )
+    type  (<\) (BTree l (nt:>vt) r) (n::Symbol)
+        = If (n==nt && l==() && r == ())
+            ()
+            (If (CmpNat (Cnt r) (Cnt l) == LT)
+                -- reduce left
+                (If (CmpSymbol n nt == GT)
+                    -- del right 3
+                    ( BTree ( l <\ TName (TMax l) )
+                            ( TMax l )
+                            ( r <\ n <+ nt:>vt )
+                    )
+                    (If (CmpSymbol n nt == EQ)
+                        -- del top 2
+                        ( BTree ( l <\ TName (TMax l) )
+                                ( TMax l )
+                                r
+                        )
+                        -- del left 1
+                        ( BTree (l <\ n) (nt:>vt) r )
+                    )
+                )
+                -- reduce right
+                (If (CmpSymbol n nt == GT)
+                    -- del right 6
+                    ( BTree l (nt:>vt) (r <\ n) )
+                    (If (CmpSymbol n nt == EQ)
+                        -- del top 5
+                        ( BTree l
+                                ( TMax r )
+                                ( r <\ TName (TMax r) )
+                        )
+                        -- del left 4
+                        ( BTree ( l <\n <+ nt:>vt )
+                                ( TMax r )
+                                ( r <\ TName (TMax r) )
+                        )
+                    )
+                )
+            )
+    type TLift (BTree l (nt:>vt) r) f = BTree (TLift l f) (nt:>f vt) (TLift r f)
+    newRec _ = BTree (newRec (Proxy :: Proxy l))
+                    (V Nothing :: nt :> Maybe vt)
+                    (newRec (Proxy :: Proxy r))
+
+{-
+type family a <+ b where
+    () <+ (n:>v) = BTree () (n:>v) ()
+    BTree l (nt:>vt) r <+ (n:>v)
+        = If (CmpNat (Cnt l) (Cnt r) == GT)
+            -- grow right
+            (If (CmpSymbol n nt == GT)
+                -- add right 4
+                BTree l (nt:>vt) (r <+ n:>v)
                 -- add left 3
                 ( l <+ n:>v <\ TName (TMax (l <+ n:>v))
                 , TMax (l <+ n:>v)
@@ -108,6 +222,7 @@ type family (a :: *) <\ (b :: Symbol) :: * where
                     )
                 )
             )
+-}
 {-
 type family LiftedRec f rec where
     LiftedRec f () = ()
@@ -143,7 +258,7 @@ newRec :: (CLiftedRec r) => LiftedRec Maybe r
 newRec = zeroRec (const Nothing)
 -}
 
-
+{-
 class CNewRec a where
     type NewRec a
     newRec :: Proxy a -> NewRec a
@@ -175,7 +290,6 @@ instance (CNewRec a, CNewRec c, KnownSymbol bn) => CNewRec (a, bn:>bv, c) where
         c1 = toRec c
         b1 = maybe (Left [bn]) (Right . V) mbv
         ls = concat $ lefts [a1] ++ lefts [b1] ++ lefts [c1]
-{-
 -}
 {-
 type family Person where
@@ -187,4 +301,8 @@ type family Person where
                 <+ "month":>Int
                 <+ "day":>Int
                 <+ "week":>Maybe Int
+type family PersonMaybe where
+    PersonMaybe = TLift Person Maybe
+
+newPerson = newRec (Proxy :: Proxy Person)
 -}

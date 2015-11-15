@@ -22,6 +22,8 @@ library
                         , List
                         , NamedRecord
                         , NamedRecord2
+                        , NamedRecord3
+                        , NamedRecord4
   default-extensions:  TypeOperators
                         , DataKinds
   build-depends:       base >= 4.7 && < 5
@@ -40,6 +42,7 @@ executable pers-exe
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200
   default-extensions:  TypeOperators
                        , DataKinds
+                       -- , CPP
   build-depends:       base
                      , pers
   default-language:    Haskell2010
