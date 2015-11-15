@@ -62,9 +62,21 @@ instance CBTree () where
     type TMin () = ()
     type TMax () = ()
     type (<+) () ((n::Symbol) :> v) = BTree () (n:>v) ()
-    type (<\) () (b::Symbol) = ()
+    type (<\) () (nt::Symbol) = ()
     type TLift () f = ()
     newRec _ = ()
+
+instance CBTree ((nt::Symbol):>vt) where
+    type Cnt (nt:>vt) = 1
+    type TMin (nt:>vt) = nt:>vt
+    type TMax (nt:>vt) = nt:>vt
+    type (<+) (nt:>vt) ((n::Symbol) :> v)
+        = If (CmpSymbol nt n == GT)
+            (BTree (n:>v) (nt:>vt) ())
+            (BTree (nt:>vt) (n:>v) ())
+    type (<\) (nt:>vt) (nt::Symbol) = ()
+    type TLift (nt:>vt) f = nt :> f vt
+    newRec _ = V Nothing :: nt :> Maybe vt
 
 {-
 instance CBTree (BTree () ((nt::Symbol):>vt) ()) where
@@ -86,6 +98,48 @@ instance CBTree (BTree () ((nt::Symbol):>vt) ()) where
                     (newRec (Proxy :: Proxy r))
 -}
 
+type family CBAdd bt nv cn cs where
+    CBAdd () ((n::Symbol) :> v) cn cs = BTree () (n:>v) ()
+    CBAdd (nt:>vt) ((n::Symbol) :> v) cn GT = BTree (n:>v) (nt:>vt) ()
+    CBAdd (nt:>vt) ((n::Symbol) :> v) cn cs = BTree (nt:>vt) (n:>v) ()
+    CBAdd (BTree l (nt:>vt) r) ((n::Symbol) :> v) GT GT
+        = BTree l (nt:>vt) (r <+ n:>v)
+    CBAdd (BTree l (nt:>vt) r) ((n::Symbol) :> v) GT cs
+        =   ( BTree ( l <+ n:>v <\ TName (TMax (l <+ n:>v)) )
+                    ( TMax (l <+ n:>v) )
+                    ( r <+ nt:>vt )
+            )
+    CBAdd (BTree l (nt:>vt) r) ((n::Symbol) :> v) cn GT
+        =   ( BTree (l <+ nt:>vt)
+                    (TMin (r <+ n:>v))
+                    (r <+ n:>v <\ TName (TMin (r <+ n:>v)))
+            )
+    CBAdd (BTree l (nt:>vt) r) ((n::Symbol) :> v) cn cs
+        = BTree (l <+ n:>v) (nt:>vt) r
+
+type family CBDel bt n cn cs where
+    -- CBDel () n cn cs = ()
+    CBDel (nt:>vt) (nt::Symbol) cn cs = ()
+    CBDel (BTree () (nt:>vt) ()) (nt::Symbol) cn cs = ()
+    CBDel (BTree l (nt:>vt) r) (n::Symbol) LT GT
+        = BTree ( l <\ TName (TMax l) )
+                ( TMax l )
+                ( r <\ n <+ nt:>vt )
+    CBDel (BTree l (nt:>vt) r) (n::Symbol) LT EQ
+        = BTree ( l <\ TName (TMax l) )
+                ( TMax l )
+                r
+    CBDel (BTree l (nt:>vt) r) (n::Symbol) LT LT = BTree (l <\ n) (nt:>vt) r
+    CBDel (BTree l (nt:>vt) r) (n::Symbol) cn GT = BTree l (nt:>vt) (r <\ n)
+    CBDel (BTree l (nt:>vt) r) (n::Symbol) cn EQ
+        = BTree l
+                ( TMax r )
+                ( r <\ TName (TMax r) )
+    CBDel (BTree l (nt:>vt) r) (n::Symbol) cn LT
+        = BTree ( l <\n <+ nt:>vt )
+                ( TMax r )
+                ( r <\ TName (TMax r) )
+
 instance (CBTree l, CBTree r) => CBTree (BTree l ((nt::Symbol):>vt) r) where
     type Cnt  (BTree l (nt:>vt) r)
         = 1 + Cnt l + Cnt r
@@ -94,66 +148,15 @@ instance (CBTree l, CBTree r) => CBTree (BTree l ((nt::Symbol):>vt) r) where
     type TMax (BTree l (nt:>vt) r)
         = If (r == ()) (nt:>vt) (TMax r)
     type (<+) (BTree l (nt:>vt) r) ((n::Symbol) :> v)
-        = If (CmpNat (Cnt l) (Cnt r) == GT)
-            -- grow right
-            (If (CmpSymbol n nt == GT)
-                -- add right 4
-                (BTree l (nt:>vt) (r <+ n:>v))
-                -- add left 3
-                ( BTree ( l <+ n:>v <\ TName (TMax (l <+ n:>v)) )
-                        ( TMax (l <+ n:>v) )
-                        ( r <+ nt:>vt )
-                )
-            )
-            -- grow left
-            (If (CmpSymbol n nt == GT)
-                -- add right 2
-                ( BTree (l <+ nt:>vt)
-                        (TMin (r <+ n:>v))
-                        (r <+ n:>v <\ TName (TMin (r <+ n:>v)))
-                )
-                -- add left 1
-                (BTree (l <+ n:>v) (nt:>vt) r)
-            )
+        = CBAdd (BTree l (nt:>vt) r)
+                ((n::Symbol) :> v)
+                (CmpNat (Cnt l) (Cnt r))
+                (CmpSymbol n nt)
     type  (<\) (BTree l (nt:>vt) r) (n::Symbol)
-        = If (n==nt && l==() && r == ())
-            ()
-            (If (CmpNat (Cnt r) (Cnt l) == LT)
-                -- reduce left
-                (If (CmpSymbol n nt == GT)
-                    -- del right 3
-                    ( BTree ( l <\ TName (TMax l) )
-                            ( TMax l )
-                            ( r <\ n <+ nt:>vt )
-                    )
-                    (If (CmpSymbol n nt == EQ)
-                        -- del top 2
-                        ( BTree ( l <\ TName (TMax l) )
-                                ( TMax l )
-                                r
-                        )
-                        -- del left 1
-                        ( BTree (l <\ n) (nt:>vt) r )
-                    )
-                )
-                -- reduce right
-                (If (CmpSymbol n nt == GT)
-                    -- del right 6
-                    ( BTree l (nt:>vt) (r <\ n) )
-                    (If (CmpSymbol n nt == EQ)
-                        -- del top 5
-                        ( BTree l
-                                ( TMax r )
-                                ( r <\ TName (TMax r) )
-                        )
-                        -- del left 4
-                        ( BTree ( l <\n <+ nt:>vt )
-                                ( TMax r )
-                                ( r <\ TName (TMax r) )
-                        )
-                    )
-                )
-            )
+        = CBDel (BTree l (nt:>vt) r)
+                (n::Symbol)
+                (CmpNat (Cnt r) (Cnt l))
+                (CmpSymbol n nt)
     type TLift (BTree l (nt:>vt) r) f = BTree (TLift l f) (nt:>f vt) (TLift r f)
     newRec _ = BTree (newRec (Proxy :: Proxy l))
                     (V Nothing :: nt :> Maybe vt)
