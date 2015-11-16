@@ -4,7 +4,7 @@
 {-# LANGUAGE CPP #-}
 module NamedRecordTest where
 
-#define Four
+#define Five
 import Data.Typeable(Proxy(..))
 
 #ifdef One
@@ -18,6 +18,10 @@ import NamedRecord2
 #ifdef Three
 -- 13 s build
 import NamedRecord3
+#endif
+#ifdef Five
+-- 13 s build
+import NamedRecord5
 #endif
 
 #ifdef Four
@@ -63,7 +67,8 @@ type family Person where
                             <+ "17":>Int
                             <+ "18":>Int
                             <+ "19":>Int
-                            <+ "20":>Int
+                            <+ "20":>Int -- error!!
+{-
                             <+ "21":>Int
                             <+ "22":>Int
                             <+ "23":>Int
@@ -87,7 +92,6 @@ type family Person where
                             <+ "41":>Int
                             <+ "42":>Int
                             <+ "43":>Int
-{-
                             <+ "44":>Int
                             <+ "45":>Int
                             <+ "46":>Int
@@ -107,17 +111,20 @@ plPersonTree = Proxy :: Proxy (ListTree Person)
 -- 23 => 2.05s  ; 11.3
 -- 11 => 0.26s  ; 1.2
 -- 56 => 23s    ; 35
--- type family PersonTree where PersonTree = ListTree Person
+type family PersonTree where PersonTree = ListTree Person
 -- type family PersonMaybe where PersonMaybe = LiftedRec PersonTree Maybe
 -- newPerson :: PersonMaybe
-newPerson = newRec (Proxy :: Proxy (ListTree Person))
+newPerson = newRec (Proxy :: Proxy (PersonTree))
 run = print newPerson
 #else
 #ifdef Three
-type family PersonMaybe where PersonMaybe = TLift Person Maybe
-newPerson :: PersonMaybe
+-- type family PersonMaybe where PersonMaybe = TLift Person Maybe
+-- newPerson :: PersonMaybe
+#else
+#ifdef Five
 #else
 newPerson :: NewRec Person
+#endif
 #endif
 newPerson = newRec (Proxy :: Proxy Person)
 

@@ -24,6 +24,7 @@ library
                         , NamedRecord2
                         , NamedRecord3
                         , NamedRecord4
+                        , NamedRecord5
   default-extensions:  TypeOperators
                         , DataKinds
   build-depends:       base >= 4.7 && < 5
