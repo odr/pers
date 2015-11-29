@@ -1,15 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 module NamedRecord6 where
@@ -20,38 +15,45 @@ import Data.Type.Bool
 import Data.Type.Equality
 import Data.Either(either, lefts)
 import Control.Lens
+import Data.Default(Default(..))
 
 infixr 9 :>
 infixl 6 +>
 
 newtype s :> val = V val deriving (Typeable, Show, Eq, Ord, Functor, Traversable, Foldable)
-newtype RP x = RP x deriving (Typeable, Show, Eq, Ord, Functor, Traversable, Foldable)
-newtype LP x = LP x deriving (Typeable, Show, Eq, Ord, Functor, Traversable, Foldable)
+instance (Default val) => Default (s:>val) where
+    def = V def
 
 type family (+>) a b where
     (+>) (n1:>v1) (n2:>v2)
-        -- = LP (n1:>v1, n2:>v2)
         = (n1:>v1, n2:>v2)
-    (+>)  (RP (a, b)) (n:>v) = LP (a, b +> n:>v)
-    (+>)  (LP (a, b)) (n:>v) = RP (a +> n:>v, b)
-    (+>)  (a, b) (n:>v) = If (Cnt a == Cnt b) (a +> n:>v, b) (a, b +> n:>v)
+    (+>)  (a, b) (n:>v)
+        = Add (EqCnt a b) (a, b) (n:>v)
+        -- = Add (Cnt a == Cnt b) (a, b) (n:>v)
+
+type family EqCnt a b :: Bool where
+    EqCnt (n1:>v1) (n2:>v2) = True
+    EqCnt (a,b) (n:>v) = False
+    EqCnt (a,b) (c,d) = (EqCnt a c) && (EqCnt b d)
+
+type family Add (x::Bool) a b where
+    Add True (a,b) (n:>v) = (a +> n:>v, b)
+    Add False (a,b) (n:>v) = (a, b +> n:>v)
+
+{-
+type family Cnt a :: Nat where
+    Cnt (n:>v) = 1
+    Cnt (a,b) = Cnt a + Cnt b
+-}
+
+type family Lifted f a where
+    Lifted f (n:>v) = n :> (f v)
+    Lifted f (a,b) = (Lifted f a, Lifted f b)
 
 type family Has a (n :: Symbol) v :: Bool where
     Has (n:>v) n v = True
     Has (a,b) n v = (Has a n v) || (Has b n v)
-    Has (LP a) n v = Has a n v
-    Has (RP a) n v = Has a n v
     Has a n v = False
-
-type family ClearP a where
-    ClearP (n:>v) = n:>v
-    ClearP (a,b) = (ClearP a, ClearP b)
-    ClearP (LP a) = ClearP a
-    ClearP (RP a) = ClearP a
-
-type family Cnt a :: Nat where
-    Cnt (n:>v) = 1
-    Cnt (a,b) = Cnt a + Cnt b
 
 class (Has a n v ~ True) => Field a (n::Symbol) v where
     fld :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
@@ -74,6 +76,7 @@ instance ((Has a n v || Has b n v) ~ True, FieldB a b n v (Has a n v))
   where
     fld = fldB (Proxy :: Proxy (Has a n v))
 
+
 ---------------------------------
 
 type T = "0":>Int +> "1":>Char +> "2":>String
@@ -83,7 +86,6 @@ p = Proxy :: Proxy T
 h :: Proxy (n:>v) -> Proxy (Has T n v)
 h _ = Proxy
 
-cp = Proxy :: Proxy (ClearP T)
 x = ((V 1, V "x"),V 'y') :: T
 
 type Person = "name":>String
@@ -112,7 +114,7 @@ type Person = "name":>String
             +> "17":>Int
             +> "18":>Int
             +> "19":>Int
-            +> "20":>Int -- error!!
+            +> "20":>Int
             +> "21":>Int
             +> "22":>Int
             +> "23":>Int
@@ -142,6 +144,11 @@ type Person = "name":>String
             +> "47":>Int
             +> "48":>Int
             +> "49":>Int
+
+defPerson = def :: Lifted Maybe Person  -- 8s
+defPerson2 = def :: Lifted Maybe Person -- 11s
+b = defPerson == defPerson2
+-- 30s (with If) -> 11,5s (without If) -> 10,5 (Cnt -> EqCnt) -> 13s (Bool::+Clear)
 {-
 -}
 

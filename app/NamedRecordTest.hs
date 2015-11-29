@@ -117,14 +117,16 @@ type family PersonTree where PersonTree = ListTree Person
 newPerson = newRec (Proxy :: Proxy (PersonTree))
 run = print newPerson
 #else
+#ifdef Five
+--data PPerson = PPerson (TLift Person Maybe) deriving Show
+newPerson = newRec (Proxy :: Proxy Person)
+run = print newPerson
+#else
 #ifdef Three
 -- type family PersonMaybe where PersonMaybe = TLift Person Maybe
 -- newPerson :: PersonMaybe
 #else
-#ifdef Five
-#else
 newPerson :: NewRec Person
-#endif
 #endif
 newPerson = newRec (Proxy :: Proxy Person)
 
@@ -134,5 +136,6 @@ person :: NewRec Person -> Either [String] Person
 person = toRec
 
 -}
+#endif
 
 #endif

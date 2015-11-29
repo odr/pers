@@ -16,21 +16,25 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Fields
-                        , NamedBTree
-                        , NamedBTree2
-                        , SplitRec
-                        , List
-                        , NamedRecord
-                        , NamedRecord2
-                        , NamedRecord3
-                        , NamedRecord4
-                        , NamedRecord5
+--                        , NamedBTree
+--                        , NamedBTree2
+--                        , SplitRec
+--                        , List
+--                        , NamedRecord
+--                        , NamedRecord2
+--                        , NamedRecord3
+--                        , NamedRecord4
+--                        , NamedRecord5
+                        , NamedRecord6
+--                        , NamedEntity
   default-extensions:  TypeOperators
                         , DataKinds
   build-depends:       base >= 4.7 && < 5
                         , ghc-prim >= 0.4
                         , record >= 0.4
                         , lens
+                        -- , free >= 4.12
+                        , data-default
   default-language:    Haskell2010
 
 executable pers-exe

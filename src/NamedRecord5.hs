@@ -32,9 +32,15 @@ infixl 6 <+
 infixl 6 <\
 
 newtype s :> val = V val deriving (Typeable, Show, Eq, Ord, Functor)
+class Named a where
+    type TName a :: Symbol
+instance Named ((n::Symbol):>v) where
+    type TName (n:>v) = n
+{-
 type family TName a where
     TName ()        = ""
     TName (n:>v)    = n
+-}
 proxyName :: s :> val -> Proxy s
 proxyName (a :: s :> val) = Proxy :: Proxy s
 proxyVal :: s :> val -> Proxy val
