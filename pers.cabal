@@ -29,9 +29,6 @@ executable pers-exe
   other-modules:        NamedRecordData
 
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200
---  default-extensions:  TypeOperators
---                       , DataKinds
-                       -- , CPP
   build-depends:       base
                      , data-default
                      , pers
