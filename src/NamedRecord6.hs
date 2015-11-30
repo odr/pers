@@ -10,11 +10,11 @@
 module NamedRecord6 where
 
 import Data.Typeable(Proxy(..), Typeable(..))
-import GHC.TypeLits
-import Data.Type.Bool
-import Data.Type.Equality
-import Data.Either(either, lefts)
-import Control.Lens
+import GHC.TypeLits(Symbol)
+import Data.Type.Bool(type (&&), type (||))
+-- import Data.Type.Equality
+-- import Data.Either(either, lefts)
+import Control.Lens(_1, _2)
 import Data.Default(Default(..))
 
 infixr 9 :>
@@ -29,7 +29,6 @@ type family (+>) a b where
         = (n1:>v1, n2:>v2)
     (+>)  (a, b) (n:>v)
         = Add (EqCnt a b) (a, b) (n:>v)
-        -- = Add (Cnt a == Cnt b) (a, b) (n:>v)
 
 type family EqCnt a b :: Bool where
     EqCnt (n1:>v1) (n2:>v2) = True
@@ -39,12 +38,6 @@ type family EqCnt a b :: Bool where
 type family Add (x::Bool) a b where
     Add True (a,b) (n:>v) = (a +> n:>v, b)
     Add False (a,b) (n:>v) = (a, b +> n:>v)
-
-{-
-type family Cnt a :: Nat where
-    Cnt (n:>v) = 1
-    Cnt (a,b) = Cnt a + Cnt b
--}
 
 type family Lifted f a where
     Lifted f (n:>v) = n :> (f v)
@@ -56,25 +49,25 @@ type family Has a (n :: Symbol) v :: Bool where
     Has a n v = False
 
 class (Has a n v ~ True) => Field a (n::Symbol) v where
-    fld :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
+    fldLens :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
 
 class FieldB a b n v (isLeft::Bool) where
     fldB :: (Functor f)
         => Proxy isLeft -> Proxy (n:>v) -> (v -> f v) -> (a,b) -> f (a,b)
 
 instance (Field a n v) => FieldB a b n v True where
-    fldB _ p = _1 . fld p
+    fldB _ p = _1 . fldLens p
 
 instance (Field b n v) => FieldB a b n v False where
-    fldB _ p = _2 . fld p
+    fldB _ p = _2 . fldLens p
 
 instance Field (n:>v) n v where
-    fld _ f (V v) = fmap V $ f v
+    fldLens _ f (V v) = fmap V $ f v
 
 instance ((Has a n v || Has b n v) ~ True, FieldB a b n v (Has a n v))
     => Field (a,b) n v
   where
-    fld = fldB (Proxy :: Proxy (Has a n v))
+    fldLens = fldB (Proxy :: Proxy (Has a n v))
 
 
 ---------------------------------

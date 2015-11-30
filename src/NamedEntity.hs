@@ -13,10 +13,10 @@
 module NamedEntity where
 
 {- Our aid is
-type Person = "person"  ::: "id"        :> Int
-                        :+> "firstname" :> Text
-                        :+> "lastname"  :> Text
-                        :+> "birthday"  :> Day
+type Person = "person" ::: "id"        :> Int
+                        +> "firstname" :> Text
+                        +> "lastname"  :> Text
+                        +> "birthday"  :> Day
 -}
 
 import Data.Typeable(Proxy(..), Typeable(..))

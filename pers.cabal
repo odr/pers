@@ -15,40 +15,25 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Fields
---                        , NamedBTree
---                        , NamedBTree2
---                        , SplitRec
---                        , List
---                        , NamedRecord
---                        , NamedRecord2
---                        , NamedRecord3
---                        , NamedRecord4
---                        , NamedRecord5
-                        , NamedRecord6
---                        , NamedEntity
-  default-extensions:  TypeOperators
-                        , DataKinds
+  exposed-modules:      NamedValue
+                        , NamedRecord
   build-depends:       base >= 4.7 && < 5
                         , ghc-prim >= 0.4
-                        , record >= 0.4
                         , lens
-                        -- , free >= 4.12
                         , data-default
   default-language:    Haskell2010
 
 executable pers-exe
   hs-source-dirs:      app
   main-is:             Main.hs
-  other-modules:        TreeTest
-                        , ListTest
-                        , NamedRecordTest
+  other-modules:        NamedRecordData
 
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200
-  default-extensions:  TypeOperators
-                       , DataKinds
+--  default-extensions:  TypeOperators
+--                       , DataKinds
                        -- , CPP
   build-depends:       base
+                     , data-default
                      , pers
   default-language:    Haskell2010
 

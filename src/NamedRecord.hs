@@ -1,155 +1,104 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 module NamedRecord
-    ( (:>)(..)
-    , type (<+)
-    -- , CNewRec(..)
-    , NewRec
-    , newRec
-    , toRec
-    , NamedRec
-    , proxyNamed
+    ( type (+>)
+    , (:>)(..)
+    , FieldLens(..)
+    , Has(..)
+    , LiftedRec(..)
+--    , ToRec(..)
+    , maybeToRec
+--    , LiftedMaybe
     ) where
 
-import Data.Typeable(Proxy(..), Typeable(..))
-import GHC.TypeLits
-import Data.Type.Bool
-import Data.Type.Equality
-import Data.Either(either, lefts)
+import Data.Either(lefts)
+import Data.Proxy(Proxy(..))
+import GHC.TypeLits(Symbol, KnownSymbol, symbolVal)
+import Data.Type.Bool(type (&&), type (||))
+import Control.Lens(_1, _2)
 
-infixr 9 :>
-infixl 6 <+
-infixl 6 <\
+import NamedValue((:>)(..))
 
-newtype s :> val = V val deriving (Typeable, Show, Eq, Ord)
+infixl 6 +>
 
-class CNamedRec a where
-    type NamedRec a
+type family (+>) a b where
+    (+>) (n1:>v1) (n2:>v2)
+        = (n1:>v1, n2:>v2)
+    (+>)  (a, b) (n:>v)
+        = Add (EqCnt a b) (a, b) (n:>v)
 
-instance CNamedRec (0:>()) where
-    type NamedRec (0:>()) = ()
+type family EqCnt a b :: Bool where
+    EqCnt (n1:>v1) (n2:>v2) = True
+    EqCnt (a,b) (n:>v) = False
+    EqCnt (a,b) (c,d) = (EqCnt a c) && (EqCnt b d)
 
-instance (CNamedRec a, CNamedRec c) => CNamedRec ((k::Nat):>(a,b,c)) where
-    type NamedRec ((k::Nat):>(a,b,c)) = (NamedRec a, b, NamedRec c)
+type family Add (x::Bool) a b where
+    Add True (a,b) (n:>v) = (a +> n:>v, b)
+    Add False (a,b) (n:>v) = (a, b +> n:>v)
 
-proxyNamed :: a:>b -> Proxy a
-proxyNamed a = Proxy :: Proxy a
+type family Has a (n :: Symbol) v :: Bool where
+    Has ((n::Symbol):>v) n v = True
+    Has (a,b) n v = (Has a n v) || (Has b n v)
+    Has a n v = False
 
-type family TName a where
-    TName (n:>v) = n
+class (Has a n v ~ True) => FieldLens a (n::Symbol) v where
+    fldLens :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
 
-type family TMin a where
-    TMin (1:>(0:>(),b,c))   = b
-    TMin (k:>(a,b,c))       = TMin a
+class FieldB a b n v (isLeft::Bool) where
+    fldB :: (Functor f)
+        => Proxy isLeft -> Proxy (n:>v) -> (v -> f v) -> (a,b) -> f (a,b)
 
-type family TMax a where
-    TMax (k:>(a,b,0:>()))   = b
-    TMax (k:>(a,b,c))       = TMax c
+instance (FieldLens a n v) => FieldB a b n v True where
+    fldB _ p = _1 . fldLens p
 
-type family a <+ b where
-    () <+ (n:>v) = (1:>(0:>(),n:>v,0:>()))
-    (0:>()) <+ (n:>v) = (1:>(0:>(),n:>v,0:>()))
-    (k:>(kl:>l,nt:>vt,kr:>r)) <+ (n:>v)
-        = (k+1) :> If (CmpNat kl kr == GT)
-            -- grow rightnewPerson
-            (If (CmpSymbol n nt == GT)
-                -- add right 4
-                (kl:>l,nt:>vt,kr:>r <+ n:>v)
-                -- add left 3
-                ( kl:>l <+ n:>v <\ TName (TMax (kl:>l <+ n:>v))
-                , TMax (kl:>l <+ n:>v)
-                , kr:>r <+ nt:>vt
-                )
-            )
-            -- grow left
-            (If (CmpSymbol n nt == GT)
-                -- add right 2
-                ( kl:>l <+ nt:>vt
-                , TMin (kr:>r <+ n:>v)
-                , kr:>r <+ n:>v <\ TName (TMin (kr:>r <+ n:>v))
-                )
-                -- add left 1
-                (kl:>l <+ n:>v, nt:>vt, kr:>r)
-            )
-type family (a :: *) <\ (b :: Symbol) :: * where
-    (1:>(0:>(),n:>v,0:>())) <\ n = 0:>()
-    (k:>(kl:>l,nt:>vt,kr:>r)) <\ n
-        = (k-1) :> If (CmpNat kr kl == LT)
-            -- reduce left
-            (If (CmpSymbol n nt == GT)
-                -- del right 3
-                ( kl:>l <\ TName (TMax (kl:>l))
-                , TMax (kl:>l)
-                , kr:>r <\ n <+ nt:>vt
-                )
-                (If (CmpSymbol n nt == EQ)
-                    -- del top 2
-                    ( kl:>l <\ TName (TMax (kl:>l))
-                    , TMax (kl:>l)
-                    , kr:>r
-                    )
-                    -- del left 1
-                    (kl:>l <\ n, nt:>vt, kr:>r)
-                )
-            )
-            -- reduce right
-            (If (CmpSymbol n nt == GT)
-                -- del right 6
-                (kl:>l, nt:>vt, kr:>r <\ n)
-                (If (CmpSymbol n nt == EQ)
-                    -- del top 5
-                    ( kl:>l
-                    , TMax (kr:>r)
-                    , kr:>r <\ TName (TMax (kr:>r))
-                    )
-                    -- del left 4
-                    ( kl:>l <\n <+ nt:>vt
-                    , TMax (kr:>r)
-                    , kr:>r <\ TName (TMax (kr:>r))
-                    )
-                )
-            )
+instance (FieldLens b n v) => FieldB a b n v False where
+    fldB _ p = _2 . fldLens p
 
+instance FieldLens (n:>v) n v where
+    fldLens _ f (V v) = fmap V $ f v
 
-class CNewRec a where
-    type NewRec a
-    newRec :: Proxy a -> NewRec a
-    toRec :: NewRec a -> Either [String] a -- [String] - list of uninitialized fields
---    init  :: NewRec a -> M.Map String PersistentValue -> Either [String] a
--- we need to constraint field types like (Field v) => (n::Symbol):>v
--- for (Field v) we need convert :: PersistentValue -> v
+instance ((Has a n v || Has b n v) ~ True, FieldB a b n v (Has a n v))
+    => FieldLens (a,b) n v
+  where
+    fldLens = fldB (Proxy :: Proxy (Has a n v))
 
-instance CNewRec () where
-    type NewRec () = ()
-    newRec _ = ()
-    toRec _ = Right ()
+{-
+type family Lifted f a where
+    Lifted f (n:>v) = n :> (f v)
+    Lifted f (a,b) = (Lifted f a, Lifted f b)
 
-instance (CNewRec a, CNewRec c, KnownSymbol bn) => CNewRec (a, bn:>bv, c) where
-    type NewRec (a,bn:>bv,c) =  ( NewRec a
-                                , bn:>(Maybe bv)
-                                , NewRec c
-                                )
-    newRec _ =  ( newRec (Proxy :: Proxy a)
-                , V Nothing :: bn :> (Maybe bv)
-                , newRec (Proxy :: Proxy c)
-                )
-    toRec (a, V mbv, c) = case (,,) <$> a1 <*> b1 <*> c1 of
-        Left _  -> Left ls
-        x -> x
-      where
-        bn = symbolVal (Proxy :: Proxy bn)
-        a1 = toRec a
-        c1 = toRec c
-        b1 = maybe (Left [bn]) (Right . V) mbv
-        ls = concat $ lefts [a1] ++ lefts [b1] ++ lefts [c1]
+class ToRec a where
+    toRec :: Lifted Maybe a -> Either [String] a
 
+instance (KnownSymbol n) => ToRec (n:>v) where
+    toRec (V mv) = maybe (Left [symbolVal (Proxy::Proxy n)]) (Right . V) mv
 
+instance (ToRec a, ToRec b) => ToRec (a,b) where
+    toRec (a,b) = case (toRec a, toRec b) of
+        (Right x, Right y) -> Right (x,y)
+        (x, y) -> Left $ concat $ lefts [x] ++ lefts [y]
+-}
+class LiftedRec (f :: * -> *) a where
+    type Lifted f a
+    toRec :: (forall v. f v -> Maybe v) -> Lifted f a -> Either [String] a
+
+instance (KnownSymbol n) => LiftedRec f (n:>v) where
+    type Lifted f (n:>v) = n :> (f v)
+    toRec g (V fv) = maybe (Left [symbolVal (Proxy::Proxy n)]) (Right . V)
+                $ g fv
+
+instance (LiftedRec f a, LiftedRec f b) => LiftedRec f (a,b) where
+    type Lifted f (a,b) = (Lifted f a, Lifted f b)
+    toRec g (a,b) = case (toRec g a, toRec g b) of
+        (Right x, Right y) -> Right (x,y)
+        (x, y) -> Left $ concat $ lefts [x] ++ lefts [y]
+
+maybeToRec :: (LiftedRec Maybe a) => Lifted Maybe a -> Either [String] a
+maybeToRec = toRec id
