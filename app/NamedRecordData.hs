@@ -3,6 +3,8 @@
 module NamedRecordData where
 
 import Data.Default(def)
+import Data.Proxy(Proxy(..))
+
 import NamedRecord
 
 type Person = "name":>String
@@ -67,3 +69,6 @@ type Long = "1":>Int
 defPerson = def :: Lifted Maybe Person
 
 defLong = def :: Lifted Maybe Long
+
+pPerson = Proxy :: Proxy Person
+pLong = Proxy :: Proxy Long

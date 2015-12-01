@@ -8,8 +8,7 @@ module PersistRec
     , mapToRec
     ) where
 
-import Database.Persist.Class(PersistField(..))
-import Database.Persist.Types(PersistValue(..))
+import Database.Persist(PersistValue(..), PersistField(..))
 import Data.Either(either, lefts)
 import Data.Proxy(Proxy(..))
 import Data.Map(Map)
@@ -35,4 +34,7 @@ instance (PersistRec a, PersistRec b) => PersistRec (a,b) where
 mapToRec :: (ToRec a, PersistRec a)
         => Proxy a -> Map SomeSymbol PersistValue -> Either [SomeSymbol] a
 mapToRec p = toRec . fromMap p
+
+-- mapToRec p . toMap == Right
+
 

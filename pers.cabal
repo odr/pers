@@ -20,11 +20,12 @@ library
                         , PersistRec
   build-depends:       base >= 4.7 && < 5
                         , ghc-prim >= 0.4
-                        , lens-simple
+                        -- , lens-simple
                         , data-default
-                        -- , text
                         , containers
                         , persistent
+                        -- , lens
+                        , microlens
   default-language:    Haskell2010
 
 executable pers-exe
@@ -34,8 +35,11 @@ executable pers-exe
 
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200
   build-depends:       base
-                     , data-default
-                     , pers
+                        , data-default
+                        , containers
+                        , persistent
+                        , microlens
+                        , pers
   default-language:    Haskell2010
 
 test-suite pers-test
