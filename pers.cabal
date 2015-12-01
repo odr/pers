@@ -17,12 +17,14 @@ library
   hs-source-dirs:      src
   exposed-modules:      NamedValue
                         , NamedRecord
+                        , FromMap
   build-depends:       base >= 4.7 && < 5
                         , ghc-prim >= 0.4
                         , lens-simple
                         , data-default
-                        , text
+                        -- , text
                         , containers
+                        , persistent
   default-language:    Haskell2010
 
 executable pers-exe

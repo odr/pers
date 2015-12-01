@@ -1,14 +1,16 @@
 module Main where
 
 import Data.Default(Default(..))
-import Data.Text(Text)
+-- import Data.Text(Text)
 import qualified Data.Map as M
 import NamedRecord -- (Lifted)
 import NamedRecordData -- (Person, defPerson)
+import FromMap
+import GHC.TypeLits(SomeSymbol, someSymbolVal)
 
 main :: IO ()
 --main = print (maybeToRec defLong1 :: Either [String] Long)
-main = print (toRec defLong1 :: Either [Text] Long)
+main = print (toRec defLong1 :: Either [SomeSymbol] Long)
 
 defPerson1 = defPerson -- :: Lifted Maybe Person  -- 8s
 defPerson2 = defPerson -- :: Lifted Maybe Person -- 11s
@@ -18,10 +20,14 @@ bp = defPerson1 == defPerson2
 defLong1 = def::Lifted Maybe Long
 
 {-
-meMap = M.fromList [("name", FV "Dmitry"),("age",FV 46),("gender",FV True)
-                   ,("year",FV 1969),("month",FV 6),("day",FV 13),("week",FV 6)
+meMap = M.fromList  [ (someSymbolVal "name"     , FV "Dmitry")
+                    , (someSymbolVal "age"      , FV 46)
+                    , (someSymbolVal "gender"   , FV True)
+                    , (someSymbolVal "year"     , FV 1969)
+                    , (someSymbolVal "month"    , FV 6)
+                    , (someSymbolVal "day"      , FV 13)
+                    , (someSymbolVal "week"     , FV 6)
                    ]
 
 mePerson = fromMap meMap
-
 -}

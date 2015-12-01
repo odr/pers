@@ -12,26 +12,25 @@ module NamedRecord
     , (:>)(..)
     , FieldLens(..)
     , Has(..)
+    , Lifted
+    , ToRec(..)
 --    , LiftedRec(..)
 --    , maybeToRec
-    , ToRec(..)
-    , Lifted
     ) where
 
 import Data.Either(lefts)
 import Data.Proxy(Proxy(..))
-import GHC.TypeLits(Symbol, KnownSymbol, symbolVal)
+import GHC.TypeLits(Symbol, KnownSymbol, SomeSymbol(..)) -- symbolVal)
 import Data.Type.Bool(type (&&), type (||))
 import Lens.Simple(_1, _2)
 
 import Control.Arrow
 import Data.Map(Map)
 import qualified Data.Map as M
-import Data.Text(Text)
-import qualified Data.Text as T
+-- import Data.Text(Text)
+-- import qualified Data.Text as T
 
 import NamedValue((:>)(..))
-import FieldValue(FieldValue(..))
 
 infixl 6 +>
 
@@ -81,23 +80,17 @@ type family Lifted f a where
     Lifted f (a,b) = (Lifted f a, Lifted f b)
 
 class ToRec a where
-    toRec :: Lifted Maybe a -> Either [Text] a
-    fromMap :: (FieldValue fv) => Proxy a -> Map Text fv -> Lifted Maybe a -> Lifted Maybe a
+    toRec :: Lifted Maybe a -> Either [SomeSymbol] a
 
 instance (KnownSymbol n) => ToRec (n:>v) where
-    toRec (V mv) = maybe (Left [T.pack $ symbolVal (Proxy::Proxy n)])
+    toRec (V mv) = maybe (Left [SomeSymbol (Proxy::Proxy n)])
                         (Right . V) mv
-    fromMap _ m _= maybe (V Nothing) (V . Just)
-                        (M.lookup (T.pack $ symbolVal (Proxy::Proxy n)) m
-                        >>= fromFieldValue
-                        )
 
 instance (ToRec a, ToRec b) => ToRec (a,b) where
     toRec (a,b) = case (toRec a, toRec b) of
         (Right x, Right y) -> Right (x,y)
         (x, y) -> Left $ concat $ lefts [x] ++ lefts [y]
-    fromMap _ m (x, y)
-        = (fromMap (Proxy :: Proxy a) m x, fromMap (Proxy :: Proxy b) m y)
+
 {-
 class LiftedRec (f :: * -> *) a where
     type Lifted f a
