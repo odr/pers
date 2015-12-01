@@ -3,8 +3,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-module FromMap
-    ( FromMap(..)
+module PersistRec
+    ( PersistRec(..)
     , mapToRec
     ) where
 
@@ -17,21 +17,22 @@ import qualified Data.Map as M
 import GHC.TypeLits(SomeSymbol(..), KnownSymbol)
 
 import NamedRecord((:>)(..), Lifted, ToRec(..))
---import Data.Text(Text)
 
-class FromMap a where
+class PersistRec a where
     fromMap :: Proxy a -> Map SomeSymbol PersistValue -> Lifted Maybe a
+    toMap :: a -> Map SomeSymbol PersistValue
 
-instance (KnownSymbol n, PersistField v) => FromMap (n:>v) where
+instance (KnownSymbol n, PersistField v) => PersistRec (n:>v) where
     fromMap _ m = maybe (V Nothing) (V . Just)
                 $ M.lookup (SomeSymbol (Proxy::Proxy n)) m
                 >>= either (const Nothing) Just . fromPersistValue
+    toMap (V x) = M.fromList [(SomeSymbol (Proxy::Proxy n), toPersistValue x)]
 
-instance (FromMap a, FromMap b) => FromMap (a,b) where
-    fromMap _ m
-        = (fromMap (Proxy :: Proxy a) m, fromMap (Proxy :: Proxy b) m)
+instance (PersistRec a, PersistRec b) => PersistRec (a,b) where
+    fromMap _ m = (fromMap (Proxy :: Proxy a) m, fromMap (Proxy :: Proxy b) m)
+    toMap = mappend <$> toMap . fst <*> toMap . snd
 
-mapToRec :: (ToRec a, FromMap a)
+mapToRec :: (ToRec a, PersistRec a)
         => Proxy a -> Map SomeSymbol PersistValue -> Either [SomeSymbol] a
 mapToRec p = toRec . fromMap p
 

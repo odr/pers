@@ -1,15 +1,13 @@
 module Main where
 
 import Data.Default(Default(..))
--- import Data.Text(Text)
 import qualified Data.Map as M
 import NamedRecord -- (Lifted)
 import NamedRecordData -- (Person, defPerson)
-import FromMap
+import PersistRec
 import GHC.TypeLits(SomeSymbol, someSymbolVal)
 
 main :: IO ()
---main = print (maybeToRec defLong1 :: Either [String] Long)
 main = print (toRec defLong1 :: Either [SomeSymbol] Long)
 
 defPerson1 = defPerson -- :: Lifted Maybe Person  -- 8s
