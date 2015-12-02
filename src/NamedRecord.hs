@@ -42,9 +42,9 @@ infixl 6 +>
 --
 --   Places of elements in tree are defined by order of addition
 type family (+>) a b where
-    -- minimal record
+    -- Minimal record
     (+>) (n1:>v1) (n2:>v2)  = (n1:>v1, n2:>v2)
-    -- adding field
+    -- Adding field
     (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v)
 
 type family EqCnt a b :: Bool where
@@ -86,7 +86,8 @@ type family Has a b :: Bool where
     Has a (b,c) = (Has a b) && (Has a c)
     Has a b = False
 
--- | Lens for field values.
+-- | Lens for field values. Algorithm is the same as for 'RecLens'.
+--   But another type for method.
 class (Has a (n:>v) ~ True) => FieldLens a (n::Symbol) v where
     fieldLens :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
 
@@ -108,6 +109,7 @@ instance ((Has a (n:>v) || Has b (n:>v)) ~ True, FieldLensB a b n v (Has a (n:>v
   where
     fieldLens = fldB (Proxy :: Proxy (Has a (n:>v)))
 
+-- | Lens for Named record. It is like Projection and Inclusion.
 class (Has a b ~ True) => RecLens a b where
     recLens :: Lens' a b
 
@@ -135,10 +137,23 @@ instance ((Has a b && Has a c) ~ True, RecLens a b, RecLens a c)
                     (\x (v1,v2) -> x & recLens .~ v1 & recLens .~ v2)
 
 --------- Initialization, Conversion ----------------
+-- | We need interface to make strong-typed Named Record from weak-typed generalized struct.
+--
+-- So there is type 'Lifted' where field values lifted in some functor.
+-- Common case is @Lifted Maybe@. Then we have Default instance for @Lifted Maybe T@.
+-- And then fill it using Lenses.
 type family Lifted f a where
     Lifted f (n:>v) = n :> (f v)
     Lifted f (a,b) = (Lifted f a, Lifted f b)
 
+-- | Conversion from @Lifted Maybe a@ to @a@.
+--
+-- If some field values is not initialized
+-- than for optional fields they will have empty value.
+-- If there is uninitialized required field than conversion is impossible and
+-- we'll got list of these fields.
+--
+-- Optional fields have type @Maybe a@ or @[a]@ but not @String@
 class ToRec a where
     toRec :: Lifted Maybe a -> Either [SomeSymbol] a
 
