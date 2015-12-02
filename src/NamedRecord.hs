@@ -21,7 +21,7 @@ import Data.Either(lefts)
 import Data.Proxy(Proxy(..))
 import GHC.TypeLits(Symbol, KnownSymbol, SomeSymbol(..))
 import Data.Type.Bool(type (&&), type (||))
-import Lens.Micro(_1, _2)
+import Lens.Micro -- (_1, _2)
 import Data.Default(Default(..))
 
 import Data.Map(Map)
@@ -32,6 +32,7 @@ import NamedValue((:>)(..))
 
 infixl 6 +>
 
+------------ Construction ----------------
 class AddRec a b where
     (+>) :: a -> b -> a +> b
 
@@ -52,7 +53,7 @@ instance (AddRec b nv) => AddRec' False a b nv where
 
 type family (+>) a b where
     (+>) (n1:>v1) (n2:>v2)  = (n1:>v1, n2:>v2)
-    (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v) -- (a, b) (n:>v)
+    (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v)
 
 type family EqCnt a b :: Bool where
     EqCnt (n1:>v1) (n2:>v2) = True
@@ -63,6 +64,8 @@ type family Add (x::Bool) a b nv where
     Add True a b nv = (a +> nv, b)
     Add False a b nv = (a, b +> nv)
 
+---------- Lens -----------------------
+{-
 type family Has a (n :: Symbol) v :: Bool where
     Has ((n::Symbol):>v) n v = True
     Has (a,b) n v = (Has a n v) || (Has b n v)
@@ -88,7 +91,42 @@ instance ((Has a n v || Has b n v) ~ True, FieldB a b n v (Has a n v))
     => FieldLens (a,b) n v
   where
     fldLens = fldB (Proxy :: Proxy (Has a n v))
+-}
+type family Has a b :: Bool where
+    Has ((n::Symbol):>v) (n:>v) = True
+    Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
+    Has a (b,c) = (Has a b) && (Has a c)
+    Has a b = False
 
+class (Has a b ~ True) => FieldLens a b where
+    fldLens :: (Functor f) => (b -> f b) -> a -> f a
+
+class FieldB a b c (isLeft::Bool) where
+    fldB :: (Functor f)
+        => Proxy isLeft -> (c -> f c) -> (a,b) -> f (a,b)
+
+instance (FieldLens a с) => FieldB a b с True where
+    fldB _ = _1 . fldLens
+
+instance (FieldLens b с) => FieldB a b с False where
+    fldB _ = _2 . fldLens
+
+instance FieldLens (n:>v) (n:>v) where
+    fldLens = id
+
+instance ((Has a (n:>v) || Has b (n:>v)) ~ True, FieldB a b (n:>v) (Has a (n:>v)))
+    => FieldLens (a,b) (n:>v)
+  where
+    fldLens = fldB (Proxy :: Proxy (Has a (n:>v)))
+
+instance ((Has a b && Has a c) ~ True, FieldLens a b, FieldLens a c)
+    => FieldLens a (b,c)
+  where
+    fldLens = lens  ((,) <$> (^. fldLens) <*> (^. fldLens))
+                    (\x (v1,v2) -> x & fldLens .~ v1 & fldLens .~ v2)
+        -- fldB (Proxy :: Proxy (Has a (n:>v)))
+
+--------- Initialization, Conversion ----------------
 type family Lifted f a where
     Lifted f (n:>v) = n :> (f v)
     Lifted f (a,b) = (Lifted f a, Lifted f b)

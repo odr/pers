@@ -48,8 +48,12 @@ type Person' = Person +> "person" :> Person
 
 mePerson' = fmap (\p -> p +> V p :: Person') mePerson
 
-mePerson'' = fmap (\p -> p & lp . lw .~ Just 5 & lw1 .~ Just 3) mePerson'
+mePerson'' = fmap (\p -> p
+                    & lw' .~ V (Just 3)
+                    & lp' . (sequenceA.) . fmap . lw .~ V (Just 5)
+                )
+                mePerson' :: Either [SomeSymbol] Person'
   where
-    lp = fldLens (Proxy :: Proxy ("person":>Person))
-    lw = fldLens (Proxy :: Proxy ("week" :> Maybe Int))
-    lw1 = fldLens (Proxy :: Proxy ("week" :> Maybe Int))
+    lp' = fldLens :: Lens' Person' ("person":>Person)
+    lw  = fldLens :: Lens' Person  ("week" :> Maybe Int)
+    lw' = fldLens :: Lens' Person' ("week" :> Maybe Int)
