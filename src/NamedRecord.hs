@@ -11,8 +11,9 @@ module NamedRecord
     ( type (+>)
     , (:>)(..)
     , AddRec(..)
+    , RecLens(..)
     , FieldLens(..)
-    , Has(..)
+--    , Has(..)
     , Lifted
     , ToRec(..)
     ) where
@@ -28,31 +29,22 @@ import Data.Map(Map)
 import qualified Data.Map as M
 
 
-import NamedValue((:>)(..))
+import NamedValue((:>)(..), valLens)
 
 infixl 6 +>
 
 ------------ Construction ----------------
-class AddRec a b where
-    (+>) :: a -> b -> a +> b
-
-instance AddRec (n1:>v1) (n2:>v2) where
-    a +> b = (a,b)
-
-instance (AddRec' (EqCnt a b) a b (n :> v)) => AddRec (a,b) (n:>v) where
-    x +> y = add (Proxy :: Proxy (EqCnt a b)) x y
-
-class AddRec' (x::Bool) a b nv where
-    add :: Proxy x -> (a,b) -> nv -> Add x a b nv
-
-instance (AddRec a nv) => AddRec' True a b nv where
-    add _ (x,y) nv = (x +> nv, y)
-
-instance (AddRec b nv) => AddRec' False a b nv where
-    add _ (x,y) nv = (x, y +> nv)
-
+-- | Construct Named Record type by adding fields from left to right.
+--
+--   It construct tree from tuples with property:
+--
+--   * Left branch has the same count of elements as right branch or one more
+--
+--   Places of elements in tree are defined by order of addition
 type family (+>) a b where
+    -- minimal record
     (+>) (n1:>v1) (n2:>v2)  = (n1:>v1, n2:>v2)
+    -- adding field
     (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v)
 
 type family EqCnt a b :: Bool where
@@ -64,67 +56,83 @@ type family Add (x::Bool) a b nv where
     Add True a b nv = (a +> nv, b)
     Add False a b nv = (a, b +> nv)
 
+-- | Constract Named Revord value by adding values
+class (Has a b ~ False) => AddRec a b where
+    (+>) :: a -> b -> a +> b
+
+-- | minimal record value
+instance (Has (n1:>v1) (n2:>v2) ~ False) => AddRec (n1:>v1) (n2:>v2) where
+    a +> b = (a,b)
+
+-- | adding next field
+instance (AddRecB (EqCnt a b) a b (n :> v), Has (a,b) (n:>v) ~ False)
+        => AddRec (a,b) (n:>v) where
+    x +> y = add (Proxy :: Proxy (EqCnt a b)) x y
+
+class AddRecB (x::Bool) a b nv where
+    add :: Proxy x -> (a,b) -> nv -> Add x a b nv
+
+instance (AddRec a nv) => AddRecB True a b nv where
+    add _ (x,y) nv = (x +> nv, y)
+
+instance (AddRec b nv) => AddRecB False a b nv where
+    add _ (x,y) nv = (x, y +> nv)
+
 ---------- Lens -----------------------
-{-
-type family Has a (n :: Symbol) v :: Bool where
-    Has ((n::Symbol):>v) n v = True
-    Has (a,b) n v = (Has a n v) || (Has b n v)
-    Has a n v = False
-
-class (Has a n v ~ True) => FieldLens a (n::Symbol) v where
-    fldLens :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
-
-class FieldB a b n v (isLeft::Bool) where
-    fldB :: (Functor f)
-        => Proxy isLeft -> Proxy (n:>v) -> (v -> f v) -> (a,b) -> f (a,b)
-
-instance (FieldLens a n v) => FieldB a b n v True where
-    fldB _ p = _1 . fldLens p
-
-instance (FieldLens b n v) => FieldB a b n v False where
-    fldB _ p = _2 . fldLens p
-
-instance FieldLens (n:>v) n v where
-    fldLens _ f (V v) = fmap V $ f v
-
-instance ((Has a n v || Has b n v) ~ True, FieldB a b n v (Has a n v))
-    => FieldLens (a,b) n v
-  where
-    fldLens = fldB (Proxy :: Proxy (Has a n v))
--}
+-- | Does record contain an element or another record?
 type family Has a b :: Bool where
     Has ((n::Symbol):>v) (n:>v) = True
     Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
     Has a (b,c) = (Has a b) && (Has a c)
     Has a b = False
 
-class (Has a b ~ True) => FieldLens a b where
-    fldLens :: (Functor f) => (b -> f b) -> a -> f a
+-- | Lens for field values.
+class (Has a (n:>v) ~ True) => FieldLens a (n::Symbol) v where
+    fieldLens :: (Functor f) => Proxy (n:>v) -> (v -> f v) -> a -> f a
 
-class FieldB a b c (isLeft::Bool) where
+class FieldLensB a b n v (isLeft::Bool) where
     fldB :: (Functor f)
-        => Proxy isLeft -> (c -> f c) -> (a,b) -> f (a,b)
+        => Proxy isLeft -> Proxy (n:>v) -> (v -> f v) -> (a,b) -> f (a,b)
 
-instance (FieldLens a с) => FieldB a b с True where
-    fldB _ = _1 . fldLens
+instance (FieldLens a n v) => FieldLensB a b n v True where
+    fldB _ p = _1 . fieldLens p
 
-instance (FieldLens b с) => FieldB a b с False where
-    fldB _ = _2 . fldLens
+instance (FieldLens b n v) => FieldLensB a b n v False where
+    fldB _ p = _2 . fieldLens p
 
-instance FieldLens (n:>v) (n:>v) where
-    fldLens = id
+instance FieldLens (n:>v) n v where
+    fieldLens _ f (V v) = fmap V $ f v
 
-instance ((Has a (n:>v) || Has b (n:>v)) ~ True, FieldB a b (n:>v) (Has a (n:>v)))
-    => FieldLens (a,b) (n:>v)
+instance ((Has a (n:>v) || Has b (n:>v)) ~ True, FieldLensB a b n v (Has a (n:>v)))
+    => FieldLens (a,b) n v
   where
-    fldLens = fldB (Proxy :: Proxy (Has a (n:>v)))
+    fieldLens = fldB (Proxy :: Proxy (Has a (n:>v)))
 
-instance ((Has a b && Has a c) ~ True, FieldLens a b, FieldLens a c)
-    => FieldLens a (b,c)
+class (Has a b ~ True) => RecLens a b where
+    recLens :: Lens' a b
+
+class RecLensB a b c (isLeft::Bool) where
+    recB :: Proxy isLeft -> Lens' (a,b) c
+
+instance (RecLens a с) => RecLensB a b с True where
+    recB _ = _1 . recLens
+
+instance (RecLens b с) => RecLensB a b с False where
+    recB _ = _2 . recLens
+
+instance RecLens (n:>v) (n:>v) where
+    recLens = id
+
+instance ((Has a (n:>v) || Has b (n:>v)) ~ True, RecLensB a b (n:>v) (Has a (n:>v)))
+    => RecLens (a,b) (n:>v)
   where
-    fldLens = lens  ((,) <$> (^. fldLens) <*> (^. fldLens))
-                    (\x (v1,v2) -> x & fldLens .~ v1 & fldLens .~ v2)
-        -- fldB (Proxy :: Proxy (Has a (n:>v)))
+    recLens = recB (Proxy :: Proxy (Has a (n:>v)))
+
+instance ((Has a b && Has a c) ~ True, RecLens a b, RecLens a c)
+    => RecLens a (b,c)
+  where
+    recLens = lens  ((,) <$> (^. recLens) <*> (^. recLens))
+                    (\x (v1,v2) -> x & recLens .~ v1 & recLens .~ v2)
 
 --------- Initialization, Conversion ----------------
 type family Lifted f a where
