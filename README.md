@@ -42,8 +42,6 @@ and got
 ```haskell
 rec = (((),V 1,()),V'b',((),V "c")) :: (((),"a":>Int,()),"b":>Char,((),"c":>String,()) 
 ```
-(Constructions like `(V 1 :: "a" :> Int)` rather ugly. Any ideas are welcomed... Perhaps some TH?)
-
 But compile time for [user application](https://github.com/odr/pers/blob/bdab60d0ba34614b8ac3772c38a2ad44adaab3d1/app/Main.hs) is absolutely blocked this idea!
 
 Later I'd tried to make balanced (not ordered) typed tree on tuples for record representation. And result is rather successfull! I got O(log n) access time and good compile time. 
