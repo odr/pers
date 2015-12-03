@@ -29,7 +29,7 @@ I tried to implement it using "very-well balanced tree" (I don't know the right 
 This is a binary search (by name) tree with count of left items is the same or one more than on the right side (for each subtree).
 The problem is construction. I realized it with [FunDeps](https://github.com/odr/pers/blob/bdab60d0ba34614b8ac3772c38a2ad44adaab3d1/src/NamedBTree.hs) and  with [TF](https://github.com/odr/pers/blob/bdab60d0ba34614b8ac3772c38a2ad44adaab3d1/src/NamedBTree2.hs). 
 
-User should write 
+User can write 
 ```haskell
 type Rec = () <+ "a":>Int <+ "b":>Char <+ "c":>String
 rec = () <+ (V "c" :: "c":>String) <+ (V 1 :: "a":>Int) <+ (V 'b' :: "b":>Char)
@@ -52,7 +52,7 @@ In this case record preserve field's order (the second aid is not realized). But
 
 All was done without any TH.
 
-## The result
+## The Result
 
 Now one can
 * Construct record sequentially:
@@ -60,7 +60,7 @@ Now one can
 type T = "a":>Int +> "b":>String +> "c":>Maybe Int
 rec = V 5 +> V "b" +> V (Just 3) :: T
 ```
-* Get Lens' for fields or record (group of fields):
+* Get Lens' for fields or record (group of fields) with O(log n) access:
 ```haskell
 lb = fieldLens (Proxy :: "b":>String) :: Lens' T String
 lca = recLens :: Lens' T ("c:>Maybe Int +> "a":>Int)
