@@ -29,19 +29,6 @@ I tried to implement it using "very-well balanced tree" (I don't know the right 
 This is a binary search (by name) tree with count of left items is the same or one more than on the right side (for each subtree).
 The problem is construction. I realized it with [FunDeps](https://github.com/odr/pers/blob/bdab60d0ba34614b8ac3772c38a2ad44adaab3d1/src/NamedBTree.hs) and  with [TF](https://github.com/odr/pers/blob/bdab60d0ba34614b8ac3772c38a2ad44adaab3d1/src/NamedBTree2.hs). 
 
-User can write 
-```haskell
-type Rec = () <+ "a":>Int <+ "b":>Char <+ "c":>String
-rec = () <+ (V "c" :: "c":>String) <+ (V 1 :: "a":>Int) <+ (V 'b' :: "b":>Char)
-```
-or
-```haskell
-rec = () <+ (V "c" :: "c":>String) <+ (V 1 :: "a":>Int) <+ (V 'b' :: "b":>Char) :: Rec
-```
-and got 
-```haskell
-rec = (((),V 1,()),V'b',((),V "c")) :: (((),"a":>Int,()),"b":>Char,((),"c":>String,()) 
-```
 But compile time for [user application](https://github.com/odr/pers/blob/bdab60d0ba34614b8ac3772c38a2ad44adaab3d1/app/Main.hs) is absolutely blocked this idea!
 
 Later I'd tried to make balanced (not ordered) typed tree on tuples for record representation. And result is rather successfull! I got O(log n) access time and good compile time. 
