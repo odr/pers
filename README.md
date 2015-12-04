@@ -47,7 +47,7 @@ rec = V 5 +> V "b" +> V (Just 3) :: T
 ```
 * Get Lens' for fields or record (group of fields) with O(log n) access:
 ```haskell
-lb = fieldLens (Proxy :: "b":>String) :: Lens' T String
+lb = fieldLens (Proxy :: Proxy ("b":>String)) :: Lens' T String
 lca = recLens :: Lens' T ("c:>Maybe Int +> "a":>Int)
 ```
 Note that recLens is Projection!
