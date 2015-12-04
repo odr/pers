@@ -45,19 +45,22 @@ Now one can
 type T = "a":>Int +> "b":>String +> "c":>Maybe Int
 rec = V 5 +> V "b" +> V (Just 3) :: T
 ```
-* Get Lens' for fields or record (group of fields) with O(log n) access:
+* Get `Lens'` for fields or record (group of fields) with O(log n) access:
 ```haskell
 lb = fieldLens (Proxy :: Proxy ("b":>String)) :: Lens' T String
 lca = recLens :: Lens' T ("c:>Maybe Int +> "a":>Int)
 ```
-Note that recLens is Projection!
+Note that `recLens` is Projection!
 * Lift all fields into functor
 ```haskell
 type LT = Lifted Maybe T
 -- LT == "a":>Maybe Int +> "b":>Maybe String +> "c":>Maybe (Maybe Int)
 ```
-If all fields has Default instances, record has it also. It is the case for Lifted Maybe T.
-* Convert from and to Map of fields (using PersistField and PersistValue from [persistent package](https://hackage.haskell.org/package/persistent))
+Record is just a tuple so it has all common instances (`Default`, `Monoid` and so on). Particulary, `Lifted Maybe T` has `Default` instance. So we can construct a new record:
+```haskell
+newRec = def :: Lifted Maybe T
+```
+* Convert from and to Map of fields (using `PersistField` and `PersistValue` from [persistent package](https://hackage.haskell.org/package/persistent))
 ```haskell
 m = M.fromList  [ (someSymbolVal "a", toPersistValue 1)
                 , (someSymbolVal "b", toPersistValue "xx")
