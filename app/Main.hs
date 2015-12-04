@@ -26,6 +26,7 @@ main = do
     print mePerson
     print mePerson'
     print mePerson''
+    print testAssoc
 
 
 defPerson1 = defPerson
@@ -60,3 +61,7 @@ mePerson'' = fmap (\p -> p
     lw  = fieldLens (Proxy :: Proxy  ("week" :> Maybe Int))
     lw' = fieldLens (Proxy :: Proxy ("week" :> Maybe Int))
     lyan' = recLens :: Lens' Person' ("year" :> Int +> "age" :>Int +> "name" :> String)
+
+testAssoc
+    = (V 5 +> V "str" +> V 1 +> V 7 :: "a":>Int +> "b":>String +> "c":>Int +>"d":>Int)
+    == (V 5 +> (V "str" +> V 1) +> V 7 :: "a":>Int +> ("b":>String +> "c":>Int +>"d":>Int))

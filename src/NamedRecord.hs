@@ -13,9 +13,12 @@ module NamedRecord
     , AddRec(..)
     , RecLens(..)
     , FieldLens(..)
---    , Has(..)
+    , Has(..)
     , Lifted
     , ToRec(..)
+    , Last
+    , Init
+    , RecStack(..)
     ) where
 
 import Data.Either(lefts)
@@ -46,25 +49,47 @@ type family (+>) a b where
     (+>) (n1:>v1) (n2:>v2)  = (n1:>v1, n2:>v2)
     -- Adding field
     (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v)
+    -- Adding record (associativity)
+    (+>) a (b,c)            = a +> Init (b,c) +> Last (b,c)
 
 type family EqCnt a b :: Bool where
     EqCnt (n1:>v1) (n2:>v2) = True
     EqCnt (a,b) (n:>v) = False
+    -- EqCnt (n:>v) () = False
+    -- EqCnt () () = True
     EqCnt (a,b) (c,d) = (EqCnt a c) && (EqCnt b d)
 
 type family Add (x::Bool) a b nv where
     Add True a b nv = (a +> nv, b)
     Add False a b nv = (a, b +> nv)
 
--- | Constract Named Revord value by adding values
+-- | Last added element
+type family Last a where
+    Last (n1:>v1, n2:>v2) = n2:>v2
+    Last (a,b) = LastB (EqCnt a b) a b
+
+type family LastB (x::Bool) a b where
+    LastB True  a b = Last b
+    LastB False a b = Last a
+
+-- | Record without last added element
+type family Init a where
+    Init (n1:>v1, n2:>v2) = n1:>v1
+    Init (a,b) = InitB (EqCnt a b) a b
+
+type family InitB (x::Bool) a b where
+    InitB True  a b = (a, Init b)
+    InitB False a b = (Init a, b)
+
+-- | Construct Named Revord value by adding values
 class (Has a b ~ False) => AddRec a b where
     (+>) :: a -> b -> a +> b
 
--- | minimal record value
+-- | Minimal record value
 instance (Has (n1:>v1) (n2:>v2) ~ False) => AddRec (n1:>v1) (n2:>v2) where
     a +> b = (a,b)
 
--- | adding next field
+-- | Adding next field
 instance (AddRecB (EqCnt a b) a b (n :> v), Has (a,b) (n:>v) ~ False)
         => AddRec (a,b) (n:>v) where
     x +> y = add (Proxy :: Proxy (EqCnt a b)) x y
@@ -77,6 +102,42 @@ instance (AddRec a nv) => AddRecB True a b nv where
 
 instance (AddRec b nv) => AddRecB False a b nv where
     add _ (x,y) nv = (x, y +> nv)
+
+-- | Adding record (associativity). Like join.
+instance (Has a (b,c) ~ False, RecStack (b,c)
+        , AddRec a (Init (b,c)), AddRec (a +> Init (b,c)) (Last (b,c))
+        ) =>
+        AddRec a (b,c)
+  where
+    x +> y = x +> recInit y +> recLast y
+
+-- | Record as stack (LIFO)
+class RecStack a where
+    recLast :: a -> Last a -- | Last added element
+    recInit :: a -> Init a -- | Record without last added element
+
+instance RecStack (n1:>v1, n2:>v2) where
+    recLast = snd
+    recInit = fst
+
+class RecStackB (x::Bool) a b where
+    recLastB :: Proxy x -> a -> b -> Last (a,b)
+    recInitB :: Proxy x -> a -> b -> Init (a,b)
+
+instance (RecStack b, Last (a,b) ~ Last b, Init (a,b) ~ (a, Init b)) =>
+        RecStackB True a b where
+    recLastB _ a b = recLast b
+    recInitB _ a b = (a, recInit b)
+
+instance (RecStack a, Last (a,b) ~ Last a, Init (a,b) ~ (Init a, b))
+        => RecStackB False a b where
+    recLastB _ a b = recLast a
+    recInitB _ a b = (recInit a, b)
+
+instance  (RecStackB (EqCnt (a,c) b) (a,c) b) =>
+        RecStack ((a,c),b) where
+    recLast (a,b) = recLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
+    recInit (a,b) = recInitB (Proxy :: Proxy (EqCnt (a,c) b)) a b
 
 ---------- Lens -----------------------
 -- | Does record contain an element or another record?
