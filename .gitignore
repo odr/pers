@@ -19,3 +19,6 @@ tags
 *.wiki
 .stack-work
 doc
+*/NamedRecord0.*
+*/NamedRecord1.*
+*/PersistEntity.*

@@ -27,6 +27,7 @@ main = do
     print mePerson'
     print mePerson''
     print testAssoc
+    print (names (Proxy :: Proxy Long))
 
 
 defPerson1 = defPerson

@@ -3,6 +3,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+
 module PersistRec
     ( PersistRec(..)
     , mapToRec
@@ -13,7 +14,7 @@ import Data.Either(either, lefts)
 import Data.Proxy(Proxy(..))
 import Data.Map(Map)
 import qualified Data.Map as M
-import GHC.TypeLits(SomeSymbol(..), KnownSymbol)
+import GHC.TypeLits(SomeSymbol(..), KnownSymbol, symbolVal)
 
 import NamedRecord((:>)(..), Lifted, ToRec(..))
 
@@ -36,5 +37,3 @@ instance (PersistRec a, PersistRec b) => PersistRec (a,b) where
 mapToRec :: (ToRec a, PersistRec a)
         => Proxy a -> Map SomeSymbol PersistValue -> Either [SomeSymbol] a
 mapToRec p = toRec . fromMap p
-
-
