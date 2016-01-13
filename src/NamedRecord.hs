@@ -21,20 +21,24 @@ module NamedRecord
     , Init
     , RecStack(..)
     , ToRecDef(..)
-    , RecList(..)
+    , ValuesList(..)
+    , NamesList(..)
     , names
+    , namesStr
     , values
+    , HasDef
     ) where
 
 import Data.Either(lefts)
 import Data.Proxy(Proxy(..))
-import GHC.TypeLits(Symbol, KnownSymbol, SomeSymbol(..))
+import GHC.TypeLits(Symbol, KnownSymbol, SomeSymbol(..), symbolVal)
 import Data.Type.Bool(type (&&), type (||))
 import Lens.Micro -- (_1, _2)
 import Data.Default(Default(..))
 
 import Data.Map(Map)
 import qualified Data.Map as M
+import Data.List(intercalate)
 
 
 import NamedValue -- ((:>)(..), valLens)
@@ -51,7 +55,6 @@ infixl 6 +>
 --   Places of elements in tree are defined by order of addition
 type family (+>) a b where
     -- Minimal record
-    -- (+>) (Field a) (Field b)  = (Field a, Field b)
     (+>) (n1:>v1) (n2:>v2)  = (n1:>v1, n2:>v2)
     -- Adding field
     (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v)
@@ -62,8 +65,6 @@ type family (+>) a b where
 type family EqCnt a b :: Bool where
     EqCnt (n1:>v1) (n2:>v2) = True
     EqCnt (a,b) (n:>v) = False
-    -- EqCnt (n:>v) () = False
-    -- EqCnt () () = True
     EqCnt (a,b) (c,d) = (EqCnt a c) && (EqCnt b d)
 
 -- | The same as (+>) but with Bool parameter. Used internally
@@ -93,7 +94,7 @@ type family InitB (x::Bool) a b where
     InitB True  a b = (a, Init b)
     InitB False a b = (Init a, b)
 
--- | Construct Named Revord value by adding values
+-- | Construct Named Record value by adding values
 class (Has a b ~ False) => AddRec a b where
     (+>) :: a -> b -> a +> b
 
@@ -122,45 +123,50 @@ instance (Has a (b,c) ~ False, RecStack (b,c)
         ) =>
         AddRec a (b,c)
   where
-    x +> y = x +> recInit y +> recLast y
+    x +> y = let (i,l) = recInitLast y in x +> i +> l
 
--- | Record as stack (LIFO)
+-- | Record as stack (LIFO). Used for adding record (adding associativity).
+-- Could be a reason for slow-down in compile-time
 class RecStack a where
-    -- | Last added element
-    recLast :: a -> Last a
-    -- | Record without last added element
-    recInit :: a -> Init a
-    -- reverseList :: a -> RL a
+    --recLast :: a -> Last a -- ^ Last added element
+    --recInit :: a -> Init a -- ^ Record without last added element
+    recInitLast :: a -> (Init a, Last a) -- ^ Record without last added element
+                                         --   and last added element.
+
 
 instance RecStack (n:>v) where
-    recLast = id
-    recInit _ = ()
-    -- reverseList = id
+    --recLast = id
+    --recInit _ = ()
+    recInitLast a = ((),a)
 
 instance RecStack (n1:>v1, n2:>v2) where
-    recLast = snd
-    recInit = fst
-    -- reverseList (a,b) = (b,a)
+    --recLast = snd
+    --recInit = fst
+    recInitLast = id
 
 -- | The same as RecStack but with Bool parameter. Used internally
 class RecStackB (x::Bool) a b where
-    recLastB :: Proxy x -> a -> b -> Last (a,b)
-    recInitB :: Proxy x -> a -> b -> Init (a,b)
+    --recLastB :: Proxy x -> a -> b -> Last (a,b)
+    --recInitB :: Proxy x -> a -> b -> Init (a,b)
+    recInitLastB :: Proxy x -> a -> b -> (Init (a,b), Last (a,b))
 
 instance (RecStack b, Last (a,b) ~ Last b, Init (a,b) ~ (a, Init b)) =>
         RecStackB True a b where
-    recLastB _ a b = recLast b
-    recInitB _ a b = (a, recInit b)
+    --recLastB _ a b = recLast b
+    --recInitB _ a b = (a, recInit b)
+    recInitLastB _ a b = let (i,l) = recInitLast b in ((a, i), l)
 
 instance (RecStack a, Last (a,b) ~ Last a, Init (a,b) ~ (Init a, b))
         => RecStackB False a b where
-    recLastB _ a b = recLast a
-    recInitB _ a b = (recInit a, b)
+    --recLastB _ a b = recLast a
+    --recInitB _ a b = (recInit a, b)
+    recInitLastB _ a b = let (i,l) = recInitLast a in ((i,b), l)
 
 instance  (RecStackB (EqCnt (a,c) b) (a,c) b, RecStack (InitB (EqCnt (a, c) b) (a, c) b)) =>
         RecStack ((a,c),b) where
-    recLast (a,b) = recLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
-    recInit (a,b) = recInitB (Proxy :: Proxy (EqCnt (a,c) b)) a b
+    --recLast (a,b) = recLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
+    --recInit (a,b) = recInitB (Proxy :: Proxy (EqCnt (a,c) b)) a b
+    recInitLast (a,b) = recInitLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
 
 ---------- Lens -----------------------
 -- | Does record contain an element or another record?
@@ -226,7 +232,7 @@ instance ((Has a b && Has a c) ~ True, RecLens a b, RecLens a c)
 -- | We need interface to make strong-typed Named Record from weak-typed generalized struct.
 --
 -- So there is type 'Lifted' where field values lifted in some functor.
--- Common case is @Lifted Maybe@. Then we have Default instance for @Lifted Maybe T@.
+-- Common case is @Lifted Maybe@. Then we have 'Default' instance for @Lifted Maybe T@.
 -- And then fill it using Lenses.
 type family Lifted f a where
     Lifted f (n:>v) = n :> (f v)
@@ -275,27 +281,38 @@ instance (Default a) => ToRecDef True a where
 instance ToRecDef False a where
     toRecDef _ = Nothing
 
--- | Get names and values as diff-function `[String] -> [String]`.
+-- | Get names and values as diff-function @[String] -> [String]@.
 -- An order is not correspond to original but the same for names and for values
-class RecList a where
+class NamesList a where
     toNames :: Proxy a -> [SomeSymbol] -> [SomeSymbol]
+
+class ValuesList a where
     toValues :: a -> [String] -> [String]
 
--- List of names.
+-- | List of names.
 -- An order is not correspond to original but the same for names and for values
-names :: (RecList a) => Proxy a -> [SomeSymbol]
+names :: (NamesList a) => Proxy a -> [SomeSymbol]
 names p = toNames p []
 
--- List of values
+namesStr :: (NamesList a) => Proxy a -> String
+namesStr = intercalate "," . map (\(SomeSymbol n)-> symbolVal n) . names
+
+-- | List of values
 -- An order is not correspond to original but the same for names and for values
-values :: (RecList a) => a -> [String]
+values :: (ValuesList a) => a -> [String]
 values x = toValues x []
 
-instance (KnownSymbol n, Show v) => RecList (n:>v) where
+instance (KnownSymbol n) => NamesList (n:>v) where
     toNames _ = (SomeSymbol (Proxy :: Proxy n) :)
+
+instance (Show v) => ValuesList (n:>v) where
     toValues (V x) = (show x :)
 
-instance (RecList a, RecList b) => RecList (a,b) where
+instance (NamesList a, NamesList b) => NamesList (a,b) where
     toNames _ = toNames (Proxy :: Proxy a) . toNames (Proxy :: Proxy b)
+
+instance (ValuesList a, ValuesList b) => ValuesList (a,b) where
     toValues (x,y) = toValues x . toValues y
+
+
 

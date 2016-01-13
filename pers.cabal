@@ -18,12 +18,17 @@ library
   exposed-modules:      NamedValue
                         , NamedRecord
                         , PersistRec
-  build-depends:       base >= 4.7 && < 5
+                        , DDL
+                        , Sqlite
+  build-depends:       base >= 4.8 && < 5
                         , ghc-prim >= 0.4
                         , data-default
                         , containers
                         , persistent
                         , microlens
+                        , text
+                        , bytestring
+                        , direct-sqlite
   default-language:    Haskell2010
 
 executable pers-exe
@@ -33,11 +38,15 @@ executable pers-exe
 
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200
   build-depends:       base
+                        , ghc-prim >= 0.4
                         , data-default
                         , containers
                         , persistent
                         , microlens
                         , pers
+                        , direct-sqlite
+                        , text
+                        , bytestring
   default-language:    Haskell2010
 
 test-suite pers-test

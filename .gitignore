@@ -22,3 +22,5 @@ doc
 */NamedRecord0.*
 */NamedRecord1.*
 */PersistEntity.*
+bin
+test.db
