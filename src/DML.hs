@@ -17,7 +17,7 @@ import NamedRecord
 import DDL
 
 class Ins back a where
-    ins :: (MonadIO m) => Proxy back -> a -> DbMonad back m ()
+    ins :: (MonadIO m) => a -> SessionMonad back m ()
 
 -- | In many cases PK should be generated.
 -- There are some possibilities:
@@ -27,12 +27,12 @@ class Ins back a where
 -- If we need sequence name (Oracle) we can derive it from table name.
 -- (Table name should be connected with DataRow a)
 class InsAutoPK back a where
-    insAuto :: (MonadIO m) => Proxy back -> Proxy a -> DataRow a -> DbMonad back m (PK a)
+    insAuto :: (MonadIO m) => Proxy a -> DataRow a -> SessionMonad back m (PK a)
 
 class AutoGenPK back a where
-    getPK :: (MonadIO m) => Proxy back -> DbMonad back m a
+    getPK :: (MonadIO m) => SessionMonad back m a
 
 instance (AutoGenPK back a) => AutoGenPK back ((n::Symbol) :> a) where
-    getPK = fmap V . getPK
+    getPK = fmap V getPK
 
 

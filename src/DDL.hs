@@ -33,6 +33,7 @@ newtype Table (n :: Symbol) rec pk = Table rec
 
 type family Conn backend
 type family FieldDB backend
+type family SessionParams backend
 
 type family PK a where
     PK (Table n rec pk) = pk
@@ -45,14 +46,17 @@ type family DataRowWithPK a where
     DataRowWithPK (Table n rec pk) = rec
 -}
 
-type DbMonad b m a = ReaderT (Conn b) m a
+type SessionMonad b m = ReaderT (Proxy b, Conn b) m
 
 --class Db backend param conn | backend -> param, backend -> conn where
 --    dbInit :: Proxy# backend -> ReaderT conn IO ()
 
+class DBSession back where
+    runSession :: (MonadIO m) => Proxy back -> SessionParams back -> SessionMonad back m a -> m a
+
 class DDL backend a where
-    createTable :: (MonadIO m) => Proxy backend -> Proxy a -> DbMonad backend m ()
-    dropTable   :: (MonadIO m) => Proxy backend -> Proxy a -> DbMonad backend m ()
+    createTable :: (MonadIO m) => Proxy a -> SessionMonad backend m ()
+    dropTable   :: (MonadIO m) => Proxy a -> SessionMonad backend m ()
 
 -- | DDL-type-information and conversion from/to type to/from database type.
 --   Database type is a type specified in db-library which
