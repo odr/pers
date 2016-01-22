@@ -1,3 +1,4 @@
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -7,43 +8,80 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module NamedRecord
-    ( type (+>)
-    , (:>)(..)
+    {-
+    ( (:>)(..)
+    , valLens
+    , getSymbol
+    , getNat
+    , type (+>)
+    -- , type (++>)
     , AddRec(..)
     , EqCnt
-    , RecLens(..)
-    , FieldLens(..)
-    , Has
-    , Lifted
-    , ToRec(..)
     , Last
     , Init
+    , Has
+    , Diff
     , RecStack(..)
+    , FieldLens(..)
+    , RecLens(..)
+    , Lifted(..)
+    , ToRec(..)
+    , HasDef(..)
     , ToRecDef(..)
-    , ValuesList(..)
     , NamesList(..)
+    , ValuesList(..)
     , names
     , namesStr
     , values
-    , HasDef
-    ) where
+    )
+    -}
+    where
 
+import GHC.Prim(Proxy#, proxy#)
 import Data.Either(lefts)
 import Data.Proxy(Proxy(..))
-import GHC.TypeLits(Symbol, KnownSymbol, SomeSymbol(..), symbolVal)
-import Data.Type.Bool(type (&&), type (||))
+import GHC.TypeLits -- (Symbol, KnownSymbol, SomeSymbol(..), KnownNat, symbolVal, natVal)
+import Data.Type.Bool(type (&&), type (||), If)
+import Data.Type.Equality(type (==))
 import Lens.Micro -- (_1, _2)
 import Data.Default(Default(..))
 
 import Data.Map(Map)
 import qualified Data.Map as M
 import Data.List(intercalate)
+import Data.Typeable(Typeable(..))
 
+infixr 9 :>
 
-import NamedValue -- ((:>)(..), valLens)
+-- | "Named Value" or "field". It has field name and field value.
+--   There is no runtime penalty as it is just a newtype with deriving instances
+newtype (s::k) :> val = V val
+    deriving (Typeable, Show, Eq, Ord, Functor, Traversable, Foldable, Monoid, Default)
+
+-- Lens for convenient composition
+valLens :: Lens' (n:>v) v
+valLens = lens (\(V val) -> val) (\(V _) val -> V val)
+
+getSymbol :: (KnownSymbol n) => (n:>v) -> String
+getSymbol (_ :: n:>v) = symbolVal (Proxy :: Proxy n)
+
+getNat :: (KnownNat n) => (n:>v) -> Integer
+getNat (_ :: n:>v) = natVal (Proxy :: Proxy n)
+
+type family FieldName a where
+    FieldName (n :> v) = n
+
+type family FieldValue a where
+    FieldValue (n :> v) = v
+
 
 infixl 6 +>
+-- infixl 6 ++>
 
 ------------ Construction ----------------
 -- | Construct Named Record type by adding fields from left to right.
@@ -57,9 +95,14 @@ type family (+>) a b where
     -- Minimal record
     (+>) (n1:>v1) (n2:>v2)  = (n1:>v1, n2:>v2)
     -- Adding field
-    (+>) (a, b) (n:>v)      = Add (EqCnt a b) a b (n:>v)
+    (+>) (a, b) (n:>v)      = AddB (EqCnt a b) a b (n:>v)
     -- Adding record (associativity)
     (+>) a (b,c)            = a +> Init (b,c) +> Last (b,c)
+    -- Neutral element
+    (+>) a () = a
+    (+>) () a = a
+
+-- type a ++> b = a +> b:>()
 
 -- | Compare cnt of elements in tupled-tree
 type family EqCnt a b :: Bool where
@@ -68,9 +111,9 @@ type family EqCnt a b :: Bool where
     EqCnt (a,b) (c,d) = (EqCnt a c) && (EqCnt b d)
 
 -- | The same as (+>) but with Bool parameter. Used internally
-type family Add (x::Bool) a b nv where
-    Add True a b nv = (a +> nv, b)
-    Add False a b nv = (a, b +> nv)
+type family AddB (x::Bool) a b nv where
+    AddB True a b nv = (a +> nv, b)
+    AddB False a b nv = (a, b +> nv)
 
 -- | Last added element
 type family Last a where
@@ -94,6 +137,22 @@ type family InitB (x::Bool) a b where
     InitB True  a b = (a, Init b)
     InitB False a b = (Init a, b)
 
+-- | Does record contain an element or another record?
+type family Has a b :: Bool where
+    Has (n:>v) (n:>v) = True
+    Has (n:>v) (n:>()) = True
+    Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
+    Has a (b,c) = (Has a b) && (Has a c)
+    Has a b = False
+
+type family Diff a b where
+    Diff () x = ()
+    Diff (n1:>v1) (n2:>v2)  = If (n1==n2 && (v1==v2 || v2 == ())) () (n1:>v1)
+    -- Diff (n1:>v1) n2        = If (n1==n2) () (n1:>v1)
+    Diff (a,b) (n:>v) = Diff (Init (a,b)) (n:>v) +> Diff (Last (a,b)) (n:>v)
+    -- Diff (a,b) n      = Diff (Init (a,b)) n +> Diff (Last (a,b)) n
+    Diff x (a,b) = Diff (Diff x a) b
+
 -- | Construct Named Record value by adding values
 class (Has a b ~ False) => AddRec a b where
     (+>) :: a -> b -> a +> b
@@ -109,7 +168,7 @@ instance (AddRecB (EqCnt a b) a b (n :> v), Has (a,b) (n:>v) ~ False)
 
 -- | The same as AddRec but with Bool parameter. Used internally
 class AddRecB (x::Bool) a b nv where
-    add :: Proxy x -> (a,b) -> nv -> Add x a b nv
+    add :: Proxy x -> (a,b) -> nv -> AddB x a b nv
 
 instance (AddRec a nv) => AddRecB True a b nv where
     add _ (x,y) nv = (x +> nv, y)
@@ -132,7 +191,6 @@ class RecStack a where
     --recInit :: a -> Init a -- ^ Record without last added element
     recInitLast :: a -> (Init a, Last a) -- ^ Record without last added element
                                          --   and last added element.
-
 
 instance RecStack (n:>v) where
     --recLast = id
@@ -168,14 +226,26 @@ instance  (RecStackB (EqCnt (a,c) b) (a,c) b, RecStack (InitB (EqCnt (a, c) b) (
     --recInit (a,b) = recInitB (Proxy :: Proxy (EqCnt (a,c) b)) a b
     recInitLast (a,b) = recInitLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
 
----------- Lens -----------------------
--- | Does record contain an element or another record?
-type family Has a b :: Bool where
-    Has (n:>v) (n:>v) = True
-    Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
-    Has a (b,c) = (Has a b) && (Has a c)
-    Has a b = False
+-------
+{-
+There can be lenses like
 
+numLens :: Proxy (n::Nat) -> (v -> f v) -> a -> f a
+
+but we can do it later
+
+infixr 5 :-->
+type family (:-->) (a :: k) (b :: k) :: k
+
+type family NatDig a b where
+    NatDig 0 _ = 0
+    NatDig 1 _ = 1
+    NatDig k b = NatDigN k b 1 (2:-->1)
+
+type family NatDigN k b n (d:-->r) where
+    NatDigN k b n = If (k < d) (k-r
+-}
+---------- Lens -----------------------
 -- | Lens for field values. Algorithm is the same as for 'RecLens'.
 --   But another type for method.
 class (Has a (n:>v) ~ True) => FieldLens a (n::Symbol) v where
@@ -199,6 +269,20 @@ instance (Has (a,b) (n:>v) ~ True, FieldLensB a b n v (Has a (n:>v)))
     => FieldLens (a,b) n v
   where
     fieldLens = fldB (Proxy :: Proxy (Has a (n:>v)))
+
+{-
+class Pair a b c where
+    fst' :: a -> b
+    snd' :: a -> c
+
+instance Pair a () () where
+    fst' _ = ()
+    snd' _ = ()
+
+instance Pair (a,b) a b where
+    fst' (a,b) = a
+    snd' (a,b) = b
+-}
 
 -- | Lens for Named record. It is like Projection and Inclusion.
 class (Has a b ~ True) => RecLens a b where
@@ -254,7 +338,7 @@ instance (KnownSymbol n, ToRecDef (HasDef v) v) => ToRec (n:>v) where
         = maybe ( maybe
                     (Left [SomeSymbol (Proxy::Proxy n)])
                     (Right . V)
-                    $ toRecDef (Proxy :: Proxy (HasDef v))
+                    $ toRecDef (proxy# :: Proxy# (HasDef v))
                 )
                 (Right . V)
                 mv
@@ -273,7 +357,7 @@ type family HasDef a :: Bool where
     HasDef a = False
 
 class ToRecDef (b::Bool) a where
-    toRecDef :: Proxy b -> Maybe a
+    toRecDef :: Proxy# b -> Maybe a
 
 instance (Default a) => ToRecDef True a where
     toRecDef _ = Just def
@@ -284,35 +368,43 @@ instance ToRecDef False a where
 -- | Get names and values as diff-function @[String] -> [String]@.
 -- An order is not correspond to original but the same for names and for values
 class NamesList a where
-    toNames :: Proxy a -> [SomeSymbol] -> [SomeSymbol]
+    toNames :: Proxy# a -> [SomeSymbol] -> [SomeSymbol]
+    toNamesStrL :: Proxy# a -> [String] -> [String]
 
 class ValuesList a where
     toValues :: a -> [String] -> [String]
 
 -- | List of names.
--- An order is not correspond to original but the same for names and for values
-names :: (NamesList a) => Proxy a -> [SomeSymbol]
+-- An order is correspond to original
+names :: (NamesList a) => Proxy# a -> [SomeSymbol]
 names p = toNames p []
 
-namesStr :: (NamesList a) => Proxy a -> String
-namesStr = intercalate "," . map (\(SomeSymbol n)-> symbolVal n) . names
+namesStr :: (NamesList a) => Proxy# a -> String
+namesStr p = intercalate "," (namesStrL p)
+
+namesStrL :: (NamesList a) => Proxy# a -> [String]
+namesStrL p = toNamesStrL p []
 
 -- | List of values
--- An order is not correspond to original but the same for names and for values
+-- An order is correspond to original
 values :: (ValuesList a) => a -> [String]
 values x = toValues x []
 
 instance (KnownSymbol n) => NamesList (n:>v) where
     toNames _ = (SomeSymbol (Proxy :: Proxy n) :)
+    toNamesStrL _ = (symbolVal' (proxy# :: Proxy# n) :)
 
 instance (Show v) => ValuesList (n:>v) where
     toValues (V x) = (show x :)
 
-instance (NamesList a, NamesList b) => NamesList (a,b) where
-    toNames _ = toNames (Proxy :: Proxy a) . toNames (Proxy :: Proxy b)
+instance (RecStack (x,y), NamesList (Last (x,y)), NamesList (Init (x,y)))
+    => NamesList (x,y) where
+-- instance (NamesList a, NamesList b) => NamesList (a,b) where
+    toNames _ = toNames (proxy# :: Proxy# (Init (x,y))) . toNames (proxy# :: Proxy# (Last (x,y)))
+    toNamesStrL _ = toNamesStrL (proxy# :: Proxy# (Init (x,y))) . toNamesStrL (proxy# :: Proxy# (Last (x,y)))
 
-instance (ValuesList a, ValuesList b) => ValuesList (a,b) where
-    toValues (x,y) = toValues x . toValues y
-
-
+instance (RecStack (x,y), ValuesList (Last (x,y)), ValuesList (Init (x,y)))
+    => ValuesList (x,y) where
+-- instance (ValuesList a, ValuesList b) => ValuesList (a,b) where
+    toValues (x,y) = let (i,l) = recInitLast (x,y) in toValues i . toValues l
 
