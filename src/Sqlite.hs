@@ -8,7 +8,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Sqlite where
 
+import Prelude as P
 import GHC.Prim(Proxy#, proxy#)
+import Control.Monad.Catch
 import Data.Proxy(Proxy(..))
 import GHC.TypeLits(Symbol(..), KnownSymbol, SomeSymbol(..), symbolVal', symbolVal)
 import Data.Text(Text)
@@ -18,7 +20,9 @@ import Data.Int(Int64)
 import qualified Data.Text.Lazy as TL
 import Data.Text.Format -- (format)
 import Control.Monad.Trans.Reader(ReaderT(..), ask)
+import Control.Monad.Trans.RWS(RWS(..))
 import Control.Monad.IO.Class(MonadIO(..))
+import Data.List(intercalate)
 
 import NamedRecord
 import DDL
@@ -30,6 +34,9 @@ sqlite = Proxy :: Proxy Sqlite
 type instance Conn Sqlite = Database
 type instance SessionParams Sqlite = Text
 type instance FieldDB Sqlite = SQLData
+
+instance DBOption Sqlite where
+    paramName _ = format "?{}" . Only
 
 instance (FieldDDL Sqlite a) => FieldDDL Sqlite (Maybe a) where
     typeName pb (_::Proxy (Maybe a))
@@ -67,9 +74,8 @@ instance FieldDDL Sqlite ByteString where
 instance DBSession Sqlite where
     runSession _ par sm = do
         conn <- liftIO $ open par
-        r <- runReaderT sm (sqlite, conn)
-        liftIO $ close conn
-        return r
+        finally (runReaderT sm (sqlite, conn))
+                (liftIO $ close conn)
 
 instance (RowDDL Sqlite a, KnownSymbol n, NamesList pk)
     => DDL Sqlite (Table n a pk)
@@ -77,7 +83,7 @@ instance (RowDDL Sqlite a, KnownSymbol n, NamesList pk)
     createTable (Proxy :: Proxy (Table n a pk)) = runSqliteDDL
         $ format "CREATE TABLE IF NOT EXISTS {} ({}, PRIMARY KEY ({}))"
             ( symbolVal' (proxy# :: Proxy# n)
-            , rowCreate sqlite (Proxy :: Proxy a)
+            , rowCreate (proxy# :: Proxy# Sqlite) (Proxy :: Proxy a)
             , namesStr (proxy# :: Proxy# pk)
             )
     dropTable (Proxy :: Proxy (Table n a pk)) = runSqliteDDL
@@ -86,35 +92,72 @@ instance (RowDDL Sqlite a, KnownSymbol n, NamesList pk)
 runSqliteDDL :: (MonadIO m) => TL.Text -> SessionMonad Sqlite m ()
 runSqliteDDL cmd = ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
 
+instance AutoGenPK Sqlite Int64 where
+    getPK = ask >>= \(_,conn) -> liftIO (lastInsertRowId conn)
+
 instance (NamesList a, KnownSymbol t, RowDDL Sqlite a)
     => Ins Sqlite (Table t a pk)
   where
-    ins (Table rec :: Table t a pk) = insSqlite (proxy# :: Proxy# t) rec
-
-instance AutoGenPK Sqlite Int64 where
-    getPK = ask >>= \(_,conn) -> liftIO (lastInsertRowId conn)
+    ins (rs :: [Table t a pk]) = do
+        (_,conn) <- ask
+        liftIO $ P.print (cmd, pss)
+        stat <- liftIO $ prepare conn $ TL.toStrict cmd
+        -- liftIO $ mapM_ (\ps -> insRow stat ps) pss
+        liftIO $ finally (mapM_ (\ps -> insRow stat ps) pss)
+                         (finalize stat)
+      where
+        (cmd, pss) = insRecCmdPars (proxy# :: Proxy# Sqlite) (proxy# :: Proxy# t)
+                    $ map tableRec rs
 
 instance (KnownSymbol t, NamesList (Diff a pk)
         , AutoGenPK Sqlite pk, RowDDL Sqlite (Diff a pk))
     => InsAutoPK Sqlite (Table t a pk)
   where
-    insAuto _ (rec :: DataRow (Table t a pk))
-        = insSqlite (proxy# :: Proxy# t) rec >> getPK
+    insAuto _ (rs :: [DataRecord (Table t a pk)]) = do
+        (_,conn) <- ask
+        stat <- liftIO $ prepare conn $ TL.toStrict cmd
+        finally (mapM (\ps -> liftIO (insRow stat ps) >> getPK) pss)
+                (liftIO $ finalize stat)
+        -- liftIO $ mapM (\ps -> insRow stat ps >> lastInsertRowId conn) pss
+      where
+        (cmd, pss) = insRecCmdPars
+                        (proxy# :: Proxy# Sqlite) (proxy# :: Proxy# t) rs
 
-insSqlite :: (KnownSymbol t, RowDDL Sqlite r, NamesList r, MonadIO m)
-    => Proxy# (t::Symbol) -> r -> SessionMonad Sqlite m ()
-insSqlite pt (rec :: r) = do
-    (_,conn) <- ask
-    liftIO $ do
-        p <- prepare conn $ TL.toStrict cmd
-        bind p $ rowDb sqlite rec
-        step p
-        finalize p
+insRow :: Statement -> [SQLData] -> IO ()
+insRow stat ps = do
+    reset stat
+    bind stat ps
+    step stat
+    return ()
+
+instance (KnownSymbol t, NamesList a, RowDDL Sqlite a)
+    => Sel Sqlite (Table t a pk)
   where
-    ns = namesStrL (proxy# :: Proxy# r)
-    cmd = format "INSERT INTO {} ({}) VALUES({})"
-        ( symbolVal' pt
-        , TL.intercalate "," $ map TL.pack ns
-        , TL.intercalate ", "
-            $ zipWith (\n -> const $ "?" `mappend` TL.pack (show n)) [1..] ns
-        )
+    sel (_::Proxy (Table t a pk)) mc = do
+        (_,conn) <- ask
+        liftIO $ do
+            P.print cmd
+            p <- prepare conn $ TL.toStrict cmd
+            bind p ps
+            finally
+                (loop p id) -- TODO: to make conduit (or pipe)
+                (finalize p)
+      where
+        (cmd,ps) = selRecCmdPars (proxy# :: Proxy# t) (proxy# :: Proxy# a) mc
+        loop p frs = do
+            res <- step p
+            if res == Done
+                then return (frs [])
+                else fmap (\r -> frs
+                        . (checkErr (fromRowDb (proxy# :: Proxy# Sqlite) r) :))
+                        (columns p >>= return <* P.print)
+                    >>= loop p
+          where
+            checkErr er = case er of
+                Left ss -> error
+                    $ "Invalid Select. Error in column conversion with fields "
+                    ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
+                Right a -> a
+
+
+

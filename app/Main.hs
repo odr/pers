@@ -3,33 +3,30 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import Data.Default(Default(..))
 import qualified Data.Map as M
 import Database.Persist(toPersistValue)
 import Lens.Micro
--- import Lens.Simple
--- import Control.Lens
 import Data.Proxy(Proxy(..))
 import GHC.Prim(Proxy#, proxy#)
 import Data.Int(Int64)
-
--- import NamedValue -- (Lifted)
-import NamedRecord -- (Lifted)
-import NamedRecordData -- (Person, defPerson)
-import PersistRec
-import DDL
-import Sqlite
 import GHC.TypeLits(SomeSymbol, someSymbolVal)
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TIO
 import Control.Monad.Trans.Reader(runReaderT)
 import Control.Monad.IO.Class(MonadIO(..))
-
+import Control.Monad.Catch
 import           Database.SQLite3 -- .Simple
--- import           Database.SQLite.Simple.FromRow
 import qualified Data.Text as T
+
+import NamedRecord -- (Lifted)
+import NamedRecordData -- (Person, defPerson)
+import PersistRec
+import DDL
+import Sqlite
 import DML
 
 {-
@@ -47,40 +44,51 @@ pTab1 = Proxy :: Proxy Tab1
 setRec1 :: TRec1 -> TRec1
 setRec1 = id
 
+rec1    =  (V 1         :: "id"     :> Int64       )
+        +> (V "text1"   :: "name"   :> T.Text      )
+        +> (V Nothing   :: "val"    :> Maybe Double)
+rec2 = setRec1 $ V 2 +> V "text2" +> V (Just 2.2)
+
 sql :: IO ()
 sql = do
-    pk <- runSession sqlite "test.db" (do
+    res <- runSession sqlite "test.db" (do
             dropTable pTab1
-            liftIO $ print 1
             createTable pTab1
-            liftIO $ print 2
-            let rec1    =  (V 1         :: "id"     :> Int64       )
-                        +> (V "text1"   :: "name"   :> T.Text      )
-                        +> (V Nothing   :: "val"    :> Maybe Double)
-            ins (Table rec1 :: Tab1)
-            liftIO $ print 3
-            let rec2 = setRec1 $ V 2 +> V "text2" +> V (Just 2.2)
-            ins (Table rec2 :: Tab1)
-            liftIO $ print 4
-            let lensId = fieldLens (Proxy :: Proxy ("id" :>  Int64))
-            ins (Table $ rec1 & lensId .~ 3 :: Tab1)
+            liftIO $ print 0
             let lensIdName = recLens :: Lens' TRec1 ("id" :> Int64 +> "name" :> T.Text)
-            ins (Table $ rec2 & lensIdName .~ (V 4 +> V "text4") :: Tab1)
+            ins ([Table rec1
+                , Table rec2
+                , Table $ rec1
+                    & fieldLens (Proxy :: Proxy ("id" :>  Int64)) .~ 3
+                , Table $ rec1
+                    & (recLens :: Lens' TRec1 ("id" :>  Int64)) .~ (V 4)
+                , Table $ rec2 & lensIdName .~ (V 5 +> V "text4")
+                ] :: [Tab1])
+            liftIO $ print 1
             insAuto pTab1
-                (  (V "text auto 1" :: "name"   :> T.Text)
+                (  [(V "text auto 1" :: "name"   :> T.Text)
                 +> (V $ Just 1.1    :: "val"    :> Maybe Double)
-                :: DataRow Tab1
+                    ] :: [DataRecord Tab1]
                 )
+            -- ins ([Table rec1] :: [Tab1])
+            pk <- insAuto pTab1
+                (  [(V "text auto 2" :: "name"   :> T.Text)
+                +> (V $ Just 2.1    :: "val"    :> Maybe Double)]
+                :: [DataRecord Tab1]
+                )
+            liftIO $ print pk
+
+            sel pTab1 Nothing
 
             -- TODO обработка ошибок
-            -- TODO избавление от параметра sqlite и явного коннекта
             -- TODO внешние ключи
             -- TODO ? добавление пустого значения по умолчанию; добавление Just автоматом
-
-            -- ins sqlite
+            -- TODO проверить добавление через def -- произвольный порядок полей
+            -- TODO транзакции
+            -- TODO: to make conduit (or pipe) for Select
 
         )
-    print pk
+    print res
   -- TIO.putStrLn $ ins (proxy# :: Proxy# Sqlite) (Proxy :: Proxy Tab1)
 
   {-

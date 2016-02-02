@@ -81,7 +81,10 @@ type family FieldValue a where
 
 
 infixl 6 +>
--- infixl 6 ++>
+
+class SingleField a where
+instance SingleField (n:>v) where
+instance SingleField (n::Symbol) where
 
 ------------ Construction ----------------
 -- | Construct Named Record type by adding fields from left to right.
@@ -354,6 +357,8 @@ type family HasDef a :: Bool where
     HasDef (Maybe a) = True
     HasDef String = False
     HasDef [a] = True
+    HasDef (n:>v) = HasDef v
+    HasDef (a,b) = HasDef a && HasDef b
     HasDef a = False
 
 class ToRecDef (b::Bool) a where
