@@ -19,14 +19,37 @@ import Control.Monad.Trans.Reader(ReaderT)
 import Control.Monad.Trans.RWS(RWS(..), get, tell, put, runRWS)
 import Control.Monad.Catch
 import GHC.TypeLits
+import Data.Type.Equality -- (type (==))
+import Data.Type.Bool -- (type (||))
 import Data.Text.Format(format, Only(..))
 
 import NamedRecord
 import DDL
 
-class Ins back a where
-    ins :: (MonadIO m, MonadMask m)
-        => [a] -> SessionMonad back m ()
+class DML back a where
+    -- | Insert the list of values into database.
+    -- Should create Insert-statement with parameters
+    -- and execute it for all values in list
+    ins :: (MonadIO m, MonadMask m) => [a] -> SessionMonad back m ()
+--    upd :: (MonadIO m, MonadMask m) => [a] -> SessionMonad back m ()
+{-
+    -- | Select part of values by condition
+    selProj :: (MonadIO m, MonadMask m)
+        => forall b. Has a b ~ True => Proxy a -> Maybe (Cond back (Record a))
+                -> SessionMonad back m [Record b]
+    -- | update values with
+    upd :: (MonadIO m, MonadMask m, Has a b)
+        => Proxy a -> b -> Maybe (Cond back (Record a))
+                -> SessionMonad back m Int
+-}
+    -- | Delete values by condition.
+    -- Count of deleted records is returned
+    del :: (MonadIO m, MonadMask m)
+        => Proxy a -> Cond back (Record a) -> SessionMonad back m Int
+    -- | Select values by condition
+    sel :: (MonadIO m, MonadMask m)
+        => Proxy a -> Cond back (Record a) -> SessionMonad back m [Record a]
+
 
 -- | In many cases PK should be generated.
 -- There are some possibilities:
@@ -36,7 +59,7 @@ class Ins back a where
 --
 -- In all cases interface is the same.
 -- If we need sequence name (Oracle) we can derive it from table name.
--- (Table name should be connected with DataRow a)
+-- (Table name should be connected with 'DataRecord a')
 class InsAutoPK back a where
     insAuto :: (MonadIO m, MonadMask m)
             => Proxy a -> [DataRecord a] -> SessionMonad back m [PK a]
@@ -52,6 +75,23 @@ insRecCmd pb pt pr
   where
     ns = namesStrL pr
 
+{-
+updRecCmdPars :: (KnownSymbol t, RowDDL back r, NamesList r, DBOption back)
+    => Proxy# back -> Proxy# (t::Symbol) -> Proxy# pk -> [r] -> (Text, [[FieldDB back]])
+updRecCmdPars _ _ _ [] = mempty
+updRecCmdPars pb pt (ppk :: Proxy# pk) ((r:rs) :: [r])
+    = format "UPDATE {} SET {} WHERE {}"
+        ( symbolVal' pt
+        , TL.intercalate ","
+            $ zipWith
+                (\num name -> format "{} = {}" (TL.pack name, paramName pb num))
+                [1..] ns
+        , TL.intercalate "," $ zipWith (\n -> const $ paramName pb n) [1..] ns
+        )
+  where
+    ns = namesStrL (proxy# :: Proxy# r)
+    (w,ps) = getSqlWhere $ Equal $ rs ^. (recLens :: Lens' r pk)
+-}
 insRecCmdPars :: (KnownSymbol t, RowDDL back r, NamesList r, DBOption back)
     => Proxy# back -> Proxy# (t::Symbol) -> [r] -> (Text, [[FieldDB back]])
 insRecCmdPars pb pt (rs :: [r])
@@ -62,11 +102,6 @@ class AutoGenPK back a where
 
 instance (AutoGenPK back a) => AutoGenPK back ((n::Symbol) :> a) where
     getPK = fmap V getPK
-
-class Sel back a where
-    sel :: (MonadIO m, MonadMask m)
-        => Proxy a -> Maybe (Cond back (Record a))
-                -> SessionMonad back m [Record a]
 
 data Cond back a
     = forall b. (NamesList b, RowDDL back b, Has a b ~ True)
@@ -84,9 +119,16 @@ data Cond back a
     | And [Cond back a]
     | Or  [Cond back a]
     | Not (Cond back a)
+    | CondTrue
+
+instance Monoid (Cond back a) where
+    mempty = CondTrue
+    c1 `mappend` c2 = And [c1,c2]
+    mconcat = And
 
 sqlWhere :: (DBOption back) => Cond back a -> RWS () [FieldDB back] Int Text
 sqlWhere (x :: Cond back a) = case x of
+    CondTrue    -> return "1=1"
     Equal b     -> rel b "="
     In (bs::[b]) ->
         fmap  ( format "{} IN ({})"
@@ -129,27 +171,32 @@ sqlWhere (x :: Cond back a) = case x of
 getSqlWhere :: (DBOption back) => Cond back a -> (Text, [FieldDB back])
 getSqlWhere c = let (r,_,w) = runRWS (sqlWhere c) () 1 in (r,w)
 
--- getSel :: (DBOption back) => Proxy a -> Cond back (Record a) -> (Text, [FieldDB back])
-selRecCmdPars :: (KnownSymbol t, RowDDL back r, NamesList r, DBOption back)
-    => Proxy# (t::Symbol) -> Proxy# r -> Maybe (Cond back r) -> (Text,[FieldDB back])
-selRecCmdPars pt pr mc = case mc of
-    Nothing ->  ( format "SELECT {} FROM {}"
-                    ( TL.intercalate "," $ map TL.pack ns
-                    , symbolVal' pt
-                    )
-                , []
-                )
-    Just c ->  let (w,ps) = getSqlWhere c in
-                ( format "SELECT {} FROM {} WHERE {}"
-                    ( TL.intercalate "," $ map TL.pack ns
-                    , symbolVal' pt
-                    , w
-                    )
-                , ps
-                )
+selRecCmdPars :: (KnownSymbol t, RowDDL back r, NamesList a, DBOption back
+    , (r == a || Has r a) ~ True)
+    {- don't know why with simple "Has r a" function application is not compiled later.
+    But it is perhaps due to PolyKinds
+    -}
+    => Proxy# (t::Symbol) -> Proxy# a -> Cond back r -> (Text,[FieldDB back])
+selRecCmdPars pt pa c =
+    ( format "SELECT {} FROM {} WHERE {}"
+        ( TL.intercalate "," $ map TL.pack ns
+        , symbolVal' pt
+        , w
+        )
+    , ps
+    )
   where
-    ns = namesStrL pr
+    (w,ps) = getSqlWhere c
+    ns = namesStrL pa
 
+delRecCmdPars :: (KnownSymbol t, RowDDL back r, DBOption back)
+    => Proxy# (t::Symbol) -> Cond back r -> (Text,[FieldDB back])
+delRecCmdPars pt c =
+    ( format "DELETE FROM {} WHERE {}" ( symbolVal' pt, w )
+    , ps
+    )
+  where
+    (w,ps) = getSqlWhere c
 
 
 

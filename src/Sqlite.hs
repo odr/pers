@@ -96,7 +96,7 @@ instance AutoGenPK Sqlite Int64 where
     getPK = ask >>= \(_,conn) -> liftIO (lastInsertRowId conn)
 
 instance (NamesList a, KnownSymbol t, RowDDL Sqlite a)
-    => Ins Sqlite (Table t a pk)
+    => DML Sqlite (Table t a pk)
   where
     ins (rs :: [Table t a pk]) = do
         (_,conn) <- ask
@@ -108,6 +108,43 @@ instance (NamesList a, KnownSymbol t, RowDDL Sqlite a)
       where
         (cmd, pss) = insRecCmdPars (proxy# :: Proxy# Sqlite) (proxy# :: Proxy# t)
                     $ map tableRec rs
+
+    del (_ :: Proxy (Table t a pk)) mc = do
+        (_,conn) <- ask
+        liftIO $ P.print (cmd, ps)
+        liftIO $ prepare conn (TL.toStrict cmd)
+                >>= \stat -> finally
+                    (bind stat ps >> step stat >> changes conn)
+                    (finalize stat)
+      where
+        (cmd,ps) = delRecCmdPars (proxy# :: Proxy# t) mc
+
+    sel (_::Proxy (Table t a pk)) (c :: Cond Sqlite a) = do
+        (_,conn) <- ask
+        liftIO $ do
+            P.print cmd
+            P.print ps
+            p <- prepare conn $ TL.toStrict cmd
+            bind p ps
+            finally
+                (loop p id) -- TODO: to make conduit (or pipe)
+                (finalize p)
+      where
+        (cmd,ps) = selRecCmdPars (proxy# :: Proxy# t) (proxy# :: Proxy# a) c
+        loop p frs = do
+            res <- step p
+            if res == Done
+                then return (frs [])
+                else fmap (\r -> frs
+                        . (checkErr (fromRowDb (proxy# :: Proxy# Sqlite) r) :))
+                        (columns p >>= return <* P.print)
+                    >>= loop p
+          where
+            checkErr er = case er of
+                Left ss -> error
+                    $ "Invalid Select. Error in column conversion with fields "
+                    ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
+                Right a -> a
 
 instance (KnownSymbol t, NamesList (Diff a pk)
         , AutoGenPK Sqlite pk, RowDDL Sqlite (Diff a pk))
@@ -129,35 +166,4 @@ insRow stat ps = do
     bind stat ps
     step stat
     return ()
-
-instance (KnownSymbol t, NamesList a, RowDDL Sqlite a)
-    => Sel Sqlite (Table t a pk)
-  where
-    sel (_::Proxy (Table t a pk)) mc = do
-        (_,conn) <- ask
-        liftIO $ do
-            P.print cmd
-            p <- prepare conn $ TL.toStrict cmd
-            bind p ps
-            finally
-                (loop p id) -- TODO: to make conduit (or pipe)
-                (finalize p)
-      where
-        (cmd,ps) = selRecCmdPars (proxy# :: Proxy# t) (proxy# :: Proxy# a) mc
-        loop p frs = do
-            res <- step p
-            if res == Done
-                then return (frs [])
-                else fmap (\r -> frs
-                        . (checkErr (fromRowDb (proxy# :: Proxy# Sqlite) r) :))
-                        (columns p >>= return <* P.print)
-                    >>= loop p
-          where
-            checkErr er = case er of
-                Left ss -> error
-                    $ "Invalid Select. Error in column conversion with fields "
-                    ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
-                Right a -> a
-
-
 

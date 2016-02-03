@@ -21,6 +21,7 @@ import Control.Monad.IO.Class(MonadIO(..))
 import Control.Monad.Catch
 import           Database.SQLite3 -- .Simple
 import qualified Data.Text as T
+import Lens.Micro
 
 import NamedRecord -- (Lifted)
 import NamedRecordData -- (Person, defPerson)
@@ -48,14 +49,13 @@ rec1    =  (V 1         :: "id"     :> Int64       )
         +> (V "text1"   :: "name"   :> T.Text      )
         +> (V Nothing   :: "val"    :> Maybe Double)
 rec2 = setRec1 $ V 2 +> V "text2" +> V (Just 2.2)
+lensIdName = recLens :: Lens' TRec1 ("id" :> Int64 +> "name" :> T.Text)
 
 sql :: IO ()
 sql = do
-    res <- runSession sqlite "test.db" (do
+    runSession sqlite "test.db" (do
             dropTable pTab1
             createTable pTab1
-            liftIO $ print 0
-            let lensIdName = recLens :: Lens' TRec1 ("id" :> Int64 +> "name" :> T.Text)
             ins ([Table rec1
                 , Table rec2
                 , Table $ rec1
@@ -64,13 +64,16 @@ sql = do
                     & (recLens :: Lens' TRec1 ("id" :>  Int64)) .~ (V 4)
                 , Table $ rec2 & lensIdName .~ (V 5 +> V "text4")
                 ] :: [Tab1])
-            liftIO $ print 1
             insAuto pTab1
                 (  [(V "text auto 1" :: "name"   :> T.Text)
                 +> (V $ Just 1.1    :: "val"    :> Maybe Double)
                     ] :: [DataRecord Tab1]
                 )
-            -- ins ([Table rec1] :: [Tab1])
+            del pTab1 (Equal (V 1 :: "id" :> Int64))
+                >>= liftIO . print
+            del pTab1 (Equal (V 1 :: "id" :> Int64))
+                >>= liftIO . print
+            ins ([Table rec1] :: [Tab1])
             pk <- insAuto pTab1
                 (  [(V "text auto 2" :: "name"   :> T.Text)
                 +> (V $ Just 2.1    :: "val"    :> Maybe Double)]
@@ -78,7 +81,25 @@ sql = do
                 )
             liftIO $ print pk
 
-            sel pTab1 Nothing
+            sel pTab1 CondTrue >>= liftIO . mapM_ print
+            sel pTab1 (Equal (rec1 ^. recLens :: "id" :> Int64 +> "name" :> T.Text))
+                >>= liftIO . mapM_ print
+            sel pTab1 (Equal rec2)
+                >>= liftIO . mapM_ print
+            del pTab1 $ Equal (V 2 :: "id" :> Int64)
+            sel pTab1 (Great (V (Just 2) :: "val" :> Maybe Double))
+                >>= liftIO . mapM_ print
+            sel pTab1 (And [ Great (V (Just 2) :: "val" :> Maybe Double)
+                                  , Least (V 7 :: "id" :> Int64)
+                                  ])
+                >>= liftIO . mapM_ print
+            sel pTab1 (Null (Proxy :: Proxy ("val" :> Maybe Double)))
+                >>= liftIO . mapM_ print
+            sel pTab1 (NotNull (Proxy :: Proxy ("val" :> Maybe Double)))
+                >>= liftIO . mapM_ print
+            sel pTab1 (Not $ NotNull (Proxy :: Proxy ("val" :> Maybe Double)))
+                >>= liftIO . mapM_ print
+
 
             -- TODO обработка ошибок
             -- TODO внешние ключи
@@ -88,7 +109,7 @@ sql = do
             -- TODO: to make conduit (or pipe) for Select
 
         )
-    print res
+    -- print res
   -- TIO.putStrLn $ ins (proxy# :: Proxy# Sqlite) (Proxy :: Proxy Tab1)
 
   {-

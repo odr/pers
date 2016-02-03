@@ -74,14 +74,14 @@ class DDL backend a where
 -- | DDL-type-information and conversion from/to type to/from database type.
 --   Database type is a type specified in db-library which
 --   present different db-types as a sum-type
-class FieldDDL backend a where
+class FieldDDL backend (a :: *) where
     typeName    :: Proxy# backend -> Proxy a -> Text  -- ^ name of type in database
     nullStr     :: Proxy# backend -> Proxy# a -> Text -- ^ NULL or NOT NULL
     nullStr _ _ = "NOT NULL"
     toDb        :: Proxy# backend -> a -> FieldDB backend -- ^ value to database type
     fromDb      :: Proxy# backend -> FieldDB backend -> Maybe a -- ^ database type to value
 
-class RowDDL backend a where
+class RowDDL backend (a :: *) where
     -- | String to describe a row for table creation
     rowCreate   :: Proxy# backend -> Proxy a -> Text
     toRowDb     :: Proxy# backend -> a -> [FieldDB backend] -> [FieldDB backend]

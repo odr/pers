@@ -1,11 +1,11 @@
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
@@ -55,7 +55,6 @@ import Data.Map(Map)
 import qualified Data.Map as M
 import Data.List(intercalate)
 import Data.Typeable(Typeable(..))
-
 infixr 9 :>
 
 -- | "Named Value" or "field". It has field name and field value.
@@ -141,11 +140,12 @@ type family InitB (x::Bool) a b where
     InitB False a b = (Init a, b)
 
 -- | Does record contain an element or another record?
-type family Has a b :: Bool where
-    Has (n:>v) (n:>v) = True
+type family Has (a::k) (b::k) :: Bool where
+    -- Has (n:>v) (n:>v) = True
     Has (n:>v) (n:>()) = True
     Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
     Has a (b,c) = (Has a b) && (Has a c)
+    Has a a = True
     Has a b = False
 
 type family Diff a b where
@@ -190,43 +190,29 @@ instance (Has a (b,c) ~ False, RecStack (b,c)
 -- | Record as stack (LIFO). Used for adding record (adding associativity).
 -- Could be a reason for slow-down in compile-time
 class RecStack a where
-    --recLast :: a -> Last a -- ^ Last added element
-    --recInit :: a -> Init a -- ^ Record without last added element
     recInitLast :: a -> (Init a, Last a) -- ^ Record without last added element
                                          --   and last added element.
 
 instance RecStack (n:>v) where
-    --recLast = id
-    --recInit _ = ()
     recInitLast a = ((),a)
 
 instance RecStack (n1:>v1, n2:>v2) where
-    --recLast = snd
-    --recInit = fst
     recInitLast = id
 
 -- | The same as RecStack but with Bool parameter. Used internally
 class RecStackB (x::Bool) a b where
-    --recLastB :: Proxy x -> a -> b -> Last (a,b)
-    --recInitB :: Proxy x -> a -> b -> Init (a,b)
     recInitLastB :: Proxy x -> a -> b -> (Init (a,b), Last (a,b))
 
 instance (RecStack b, Last (a,b) ~ Last b, Init (a,b) ~ (a, Init b)) =>
         RecStackB True a b where
-    --recLastB _ a b = recLast b
-    --recInitB _ a b = (a, recInit b)
     recInitLastB _ a b = let (i,l) = recInitLast b in ((a, i), l)
 
 instance (RecStack a, Last (a,b) ~ Last a, Init (a,b) ~ (Init a, b))
         => RecStackB False a b where
-    --recLastB _ a b = recLast a
-    --recInitB _ a b = (recInit a, b)
     recInitLastB _ a b = let (i,l) = recInitLast a in ((i,b), l)
 
 instance  (RecStackB (EqCnt (a,c) b) (a,c) b, RecStack (InitB (EqCnt (a, c) b) (a, c) b)) =>
         RecStack ((a,c),b) where
-    --recLast (a,b) = recLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
-    --recInit (a,b) = recInitB (Proxy :: Proxy (EqCnt (a,c) b)) a b
     recInitLast (a,b) = recInitLastB (Proxy :: Proxy (EqCnt (a,c) b)) a b
 
 -------
@@ -236,17 +222,6 @@ There can be lenses like
 numLens :: Proxy (n::Nat) -> (v -> f v) -> a -> f a
 
 but we can do it later
-
-infixr 5 :-->
-type family (:-->) (a :: k) (b :: k) :: k
-
-type family NatDig a b where
-    NatDig 0 _ = 0
-    NatDig 1 _ = 1
-    NatDig k b = NatDigN k b 1 (2:-->1)
-
-type family NatDigN k b n (d:-->r) where
-    NatDigN k b n = If (k < d) (k-r
 -}
 ---------- Lens -----------------------
 -- | Lens for field values. Algorithm is the same as for 'RecLens'.
@@ -272,20 +247,6 @@ instance (Has (a,b) (n:>v) ~ True, FieldLensB a b n v (Has a (n:>v)))
     => FieldLens (a,b) n v
   where
     fieldLens = fldB (Proxy :: Proxy (Has a (n:>v)))
-
-{-
-class Pair a b c where
-    fst' :: a -> b
-    snd' :: a -> c
-
-instance Pair a () () where
-    fst' _ = ()
-    snd' _ = ()
-
-instance Pair (a,b) a b where
-    fst' (a,b) = a
-    snd' (a,b) = b
--}
 
 -- | Lens for Named record. It is like Projection and Inclusion.
 class (Has a b ~ True) => RecLens a b where
@@ -412,4 +373,15 @@ instance (RecStack (x,y), ValuesList (Last (x,y)), ValuesList (Init (x,y)))
     => ValuesList (x,y) where
 -- instance (ValuesList a, ValuesList b) => ValuesList (a,b) where
     toValues (x,y) = let (i,l) = recInitLast (x,y) in toValues i . toValues l
+{-
+type family Foo (a::*) (b::*) :: Bool where
+    --Foo a a = True
+    --Foo a b = False
+    Foo a b = a == b
 
+foo :: Foo a b ~ True => Proxy a -> Proxy b
+foo _ = Proxy
+
+bar :: Proxy a -> Proxy a
+bar = foo
+-}
