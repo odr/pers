@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 -- {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 module DML where
 
 import GHC.Prim(Proxy#, proxy#)
@@ -49,6 +50,9 @@ class DML back a where
     -- | Select values by condition
     sel :: (MonadIO m, MonadMask m)
         => Proxy a -> Cond back (Record a) -> SessionMonad back m [Record a]
+    -- sel (pa :: Proxy a) c = selProj pa (Proxy :: Proxy (Record a)) c
+    selProj :: (MonadIO m, MonadMask m, Has (Record a) (Proxy b) ~ True, NamesList (Proxy b), RowDDL back (Proj (Record a) (Proxy b)))
+        => Proxy a -> Proxy b -> Cond back (Record a) -> SessionMonad back m [Proj (Record a) (Proxy b)]
 
 
 -- | In many cases PK should be generated.
@@ -62,7 +66,7 @@ class DML back a where
 -- (Table name should be connected with 'DataRecord a')
 class InsAutoPK back a where
     insAuto :: (MonadIO m, MonadMask m)
-            => Proxy a -> [DataRecord a] -> SessionMonad back m [PK a]
+            => Proxy a -> [DataRecord a] -> SessionMonad back m [Proj (Record a) (PK a)]
 
 insRecCmd :: (KnownSymbol t, RowDDL back r, NamesList r, DBOption back)
     => Proxy# back -> Proxy# (t::Symbol) -> Proxy# r -> Text

@@ -40,7 +40,7 @@ instance ToRow TestField where
   toRow (TestField id_ str) = toRow (id_, str)
 -}
 type TRec1 = "id" :> Int64 +> "name" :> T.Text +> "val" :> Maybe Double
-type Tab1 = Table "tab1" TRec1 ("id" :> Int64)
+type Tab1 = Table "tab1" TRec1 (Proxy '["id"])
 pTab1 = Proxy :: Proxy Tab1
 setRec1 :: TRec1 -> TRec1
 setRec1 = id

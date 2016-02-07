@@ -74,6 +74,7 @@ getNat (_ :: n:>v) = natVal (Proxy :: Proxy n)
 
 type family FieldName a where
     FieldName (n :> v) = n
+    -- FieldNames (a,b) = Last Init (a,b)
 
 type family FieldValue a where
     FieldValue (n :> v) = v
@@ -140,21 +141,38 @@ type family InitB (x::Bool) a b where
     InitB False a b = (Init a, b)
 
 -- | Does record contain an element or another record?
-type family Has (a::k) (b::k) :: Bool where
-    -- Has (n:>v) (n:>v) = True
+type family Has a b :: Bool where
+    Has (n:>v) (n:>v) = True
     Has (n:>v) (n:>()) = True
-    Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
+    Has (n:>v) (Proxy n) = True
     Has a (b,c) = (Has a b) && (Has a c)
+    Has a (Proxy ('[] :: [Symbol])) = True
+    Has a (Proxy (n ': ns :: [Symbol])) = (Has a (Proxy n)) && (Has a (Proxy ns))
+    Has (a,b) (n:>v) = (Has a (n:>v)) || (Has b (n:>v))
+    Has (a,b) (Proxy n) = (Has a (Proxy n)) || (Has b (Proxy n))
     Has a a = True
     Has a b = False
 
 type family Diff a b where
     Diff () x = ()
-    Diff (n1:>v1) (n2:>v2)  = If (n1==n2 && (v1==v2 || v2 == ())) () (n1:>v1)
-    -- Diff (n1:>v1) n2        = If (n1==n2) () (n1:>v1)
-    Diff (a,b) (n:>v) = Diff (Init (a,b)) (n:>v) +> Diff (Last (a,b)) (n:>v)
-    -- Diff (a,b) n      = Diff (Init (a,b)) n +> Diff (Last (a,b)) n
+    Diff a (Proxy '[])  = a
+    Diff (n1:>v1) (n2:>v2)    = If (n1==n2 && (v1==v2 || v2 == ())) () (n1:>v1)
+    Diff (n1:>v1) (Proxy n2)  = If (n1==n2) () (n1:>v1)
     Diff x (a,b) = Diff (Diff x a) b
+    Diff a (Proxy (n ': ns))  = Diff (Diff a (Proxy n)) (Proxy ns)
+    Diff (a,b) (n:>v) = Diff (Init (a,b)) (n:>v) +> Diff (Last (a,b)) (n:>v)
+    Diff (a,b) (Proxy n) = Diff (Init (a,b)) (Proxy n) +> Diff (Last (a,b)) (Proxy n)
+    -- Diff (a,b) n      = Diff (Init (a,b)) n +> Diff (Last (a,b)) n
+
+type family Proj a b where
+    Proj () x = ()
+    Proj a (Proxy '[])  = ()
+    Proj (n1:>v1) (n2:>v2)    = If (n1==n2 && (v1==v2 || v2 == ())) (n1:>v1) ()
+    Proj (n1:>v1) (Proxy n2)  = If (n1==n2) (n1:>v1) ()
+    Proj x (a,b)              = Proj x (Init (a,b)) +> Proj x (Last (a,b))
+    Proj a (Proxy (n ': ns))  = Proj a (Proxy n) +> Proj a (Proxy ns)
+    Proj (a,b) (n:>v)         = Proj a (n:>v) +> Proj b (n:>v)
+    Proj (a,b) (Proxy n)      = Proj a (Proxy n) +> Proj b (Proxy n)
 
 -- | Construct Named Record value by adding values
 class (Has a b ~ False) => AddRec a b where
@@ -357,21 +375,36 @@ values :: (ValuesList a) => a -> [String]
 values x = toValues x []
 
 instance (KnownSymbol n) => NamesList (n:>v) where
-    toNames _ = (SomeSymbol (Proxy :: Proxy n) :)
-    toNamesStrL _ = (symbolVal' (proxy# :: Proxy# n) :)
+    toNames _       = (SomeSymbol (Proxy :: Proxy n) :)
+    toNamesStrL _   = (symbolVal' (proxy# :: Proxy# n) :)
+
+instance (KnownSymbol n) => NamesList (Proxy n) where
+    toNames _       = (SomeSymbol (Proxy :: Proxy n) :)
+    toNamesStrL _   = (symbolVal' (proxy# :: Proxy# n) :)
 
 instance (Show v) => ValuesList (n:>v) where
     toValues (V x) = (show x :)
 
 instance (RecStack (x,y), NamesList (Last (x,y)), NamesList (Init (x,y)))
     => NamesList (x,y) where
--- instance (NamesList a, NamesList b) => NamesList (a,b) where
-    toNames _ = toNames (proxy# :: Proxy# (Init (x,y))) . toNames (proxy# :: Proxy# (Last (x,y)))
-    toNamesStrL _ = toNamesStrL (proxy# :: Proxy# (Init (x,y))) . toNamesStrL (proxy# :: Proxy# (Last (x,y)))
+    toNames _       = toNames (proxy# :: Proxy# (Init (x,y)))
+                    . toNames (proxy# :: Proxy# (Last (x,y)))
+    toNamesStrL _   = toNamesStrL (proxy# :: Proxy# (Init (x,y)))
+                    . toNamesStrL (proxy# :: Proxy# (Last (x,y)))
+
+instance NamesList (Proxy '[]) where
+    toNames _       = id
+    toNamesStrL _   = id
+
+instance (NamesList (Proxy n), NamesList (Proxy ns))
+    => NamesList (Proxy (n ': ns)) where
+    toNames _       = toNames (proxy# :: Proxy# (Proxy n))
+                    . toNames (proxy# :: Proxy# (Proxy ns))
+    toNamesStrL _   = toNamesStrL (proxy# :: Proxy# (Proxy n))
+                    . toNamesStrL (proxy# :: Proxy# (Proxy ns))
 
 instance (RecStack (x,y), ValuesList (Last (x,y)), ValuesList (Init (x,y)))
     => ValuesList (x,y) where
--- instance (ValuesList a, ValuesList b) => ValuesList (a,b) where
     toValues (x,y) = let (i,l) = recInitLast (x,y) in toValues i . toValues l
 {-
 type family Foo (a::*) (b::*) :: Bool where
