@@ -32,6 +32,7 @@ library
                         , direct-sqlite
                         , transformers
                         , exceptions
+                        , singletons
   default-language:    Haskell2010
 
 executable pers-exe
@@ -52,6 +53,7 @@ executable pers-exe
                         , bytestring
                         , transformers
                         , exceptions
+                        , singletons
   default-language:    Haskell2010
 
 test-suite pers-test

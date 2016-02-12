@@ -6,6 +6,7 @@
 -- {-# LANGUAGE MultiParamTypeClasses #-}
 -- {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 -- {-# LANGUAGE RankNTypes #-}
 -- {-# LANGUAGE FlexibleContexts #-}
 -- {-# LANGUAGE PolyKinds #-}
@@ -16,10 +17,13 @@ module NamedRecord2
     where
 
 import Data.Singletons.Prelude
+import Data.Promotion.Prelude.List
 import GHC.TypeLits -- (Symbol, KnownSymbol, SomeSymbol(..), KnownNat, symbolVal, natVal)
 import GHC.Prim(Proxy#, proxy#)
 import Data.Proxy(Proxy(..))
 import Data.Type.Equality -- (type (==))
+
+import NRTH
 -- using sMap and Map
 -- :t sMap (singFun1 (Proxy::Proxy SndSym0) sSnd) (sing :: Sing '[ '("x",False), '("y",True) ])
 -- :t Proxy :: Proxy (Map SndSym0 '[ '("x",False)])
@@ -41,52 +45,33 @@ type family UnProxy a :: k where
 
 type family ToRep (a :: [*]) :: * where
     ToRep '[] = ()
-    ToRep '[x] = x
     ToRep (x ': xs) = (x, ToRep xs)
 
 type family FromRep (a :: *) :: [*] where
     FromRep () = '[]
     FromRep (x,y) = x ': FromRep y
-    FromRep x = '[x]
 
 type NRec (a :: [(k,*)]) = Map FstSym0 a
 type VRec (a :: [(k,*)]) = Map SndSym0 a
 type NVRec (a :: [k]) (b :: [*]) = Zip a b
 type VRecRep (a :: [(k,*)]) = ToRep (VRec a)
+type PVRecRep (a :: [(k,*)]) = (Proxy a, VRecRep a)
 type NVRecRep (a :: [k]) (b :: *) = NVRec a (FromRep b)
-{-
-type family VRec (a :: [(k,*)]) :: * where
-    VRec x = ListToTup (Map FstSym0 x)
-    {-
-    VRec ('[]::[(k,*)]) = ()
-    VRec ('[ '(n,(v:: *)) ]) = v
-    VRec ('(n,v) ': xs) = (v, VRec xs)
-    -}
 
--- type family NRec (a :: [(k,*)]) :: [k] where
---     NRec x = Map SndSym0 x
-    {-
-    NRec ('[]::[(k,*)]) = ('[] :: [k])
-    NRec ('[ '(n,(v:: *)) ]) = '[n]
-    NRec ('(n,v) ': xs) = n ': NRec xs
-    -}
+type MinusByFst a b = MinusBy EqFstSym0 a b
+type MinusNames (a :: [(k,*)]) (b :: [k]) = MinusByFst a b
 
-type family NVRec (a :: [k]) (b :: *) :: [(k, *)] where
-    NVRec x y = Zip x (TupToList y)
-    {-
-    NVRec ('[] ::[k]) ()   = ('[] :: [(k, *)])
-    NVRec ('[n] :: [k]) v  = '[n:::v]
-    NVRec (x ': xs) (v,vs) = (x ::: v) ': NVRec xs vs
-    -}
--}
+class Names (x :: [Symbol]) where
+    symbols :: Proxy# x -> [SomeSymbol]
+    names   :: Proxy# x -> [String]
+instance Names '[] where
+    symbols _ = []
+    names _ = []
+instance (KnownSymbol s, Names ss) => Names (s ': ss) where
+    symbols _ = SomeSymbol (Proxy :: Proxy s) : symbols (proxy# :: Proxy# ss)
+    names _ = symbolVal' (proxy# :: Proxy# s) : names (proxy# :: Proxy# ss)
 
-{-
-type family FieldName a where
-    FieldName (a ::: b) = a
 
-type family FieldValue a where
-    FieldValue (a ::: b) = b
--}
 {-
 import GHC.Prim(Proxy#, proxy#)
 import Data.Either(lefts)
@@ -103,34 +88,6 @@ import Data.List(intercalate)
 import Data.Typeable(Typeable(..))
 infixr 9 :>
 
--- | "Named Value" or "field". It has field name and field value.
---   There is no runtime penalty as it is just a newtype with deriving instances
-newtype (s::k) :> val = V val
-    deriving (Typeable, Show, Eq, Ord, Functor, Traversable, Foldable, Monoid, Default)
-
--- Lens for convenient composition
-valLens :: Lens' (n:>v) v
-valLens = lens (\(V val) -> val) (\(V _) val -> V val)
-
-getSymbol :: (KnownSymbol n) => (n:>v) -> String
-getSymbol (_ :: n:>v) = symbolVal (Proxy :: Proxy n)
-
-getNat :: (KnownNat n) => (n:>v) -> Integer
-getNat (_ :: n:>v) = natVal (Proxy :: Proxy n)
-
-type family FieldName a where
-    FieldName (n :> v) = n
-    -- FieldNames (a,b) = Last Init (a,b)
-
-type family FieldValue a where
-    FieldValue (n :> v) = v
-
-
-infixl 6 +>
-
-class SingleField a where
-instance SingleField (n:>v) where
-instance SingleField (n::Symbol) where
 
 ------------ Construction ----------------
 -- | Construct Named Record type by adding fields from left to right.

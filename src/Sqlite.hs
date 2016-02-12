@@ -146,7 +146,7 @@ instance (NamesList a, KnownSymbol t, RowDDL Sqlite a)
                     ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
                 Right a -> a
 
-    selProj (_::Proxy (Table t a pk)) (_::Proxy b) (c :: Cond Sqlite a) = do
+    selProj (_::Proxy (Table t a pk)) (_::b) (c :: Cond Sqlite a) = do
         (_,conn) <- ask
         liftIO $ do
             P.print cmd
@@ -157,7 +157,7 @@ instance (NamesList a, KnownSymbol t, RowDDL Sqlite a)
                 (loop p id) -- TODO: to make conduit (or pipe)
                 (finalize p)
       where
-        (cmd,ps) = selRecCmdPars (proxy# :: Proxy# t) (proxy# :: Proxy# (Proxy b)) c
+        (cmd,ps) = selRecCmdPars (proxy# :: Proxy# t) (proxy# :: Proxy# b) c
         loop p frs = do
             res <- step p
             if res == Done

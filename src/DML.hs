@@ -48,11 +48,11 @@ class DML back a where
     del :: (MonadIO m, MonadMask m)
         => Proxy a -> Cond back (Record a) -> SessionMonad back m Int
     -- | Select values by condition
-    sel :: (MonadIO m, MonadMask m)
+    sel :: (MonadIO m, MonadMask m) -- , Has (Record a) (Proxy (Record a)) ~ True)
         => Proxy a -> Cond back (Record a) -> SessionMonad back m [Record a]
     -- sel (pa :: Proxy a) c = selProj pa (Proxy :: Proxy (Record a)) c
-    selProj :: (MonadIO m, MonadMask m, Has (Record a) (Proxy b) ~ True, NamesList (Proxy b), RowDDL back (Proj (Record a) (Proxy b)))
-        => Proxy a -> Proxy b -> Cond back (Record a) -> SessionMonad back m [Proj (Record a) (Proxy b)]
+    selProj :: (MonadIO m, MonadMask m, Has (Record a) b ~ True, NamesList b, RowDDL back (Proj (Record a) b))
+        => Proxy a -> b -> Cond back (Record a) -> SessionMonad back m [Proj (Record a) b]
 
 
 -- | In many cases PK should be generated.

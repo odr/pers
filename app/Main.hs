@@ -39,6 +39,26 @@ instance FromRow TestField where
 instance ToRow TestField where
   toRow (TestField id_ str) = toRow (id_, str)
 -}
+
+{-
+should be:
+data TableDef back name recdef pkdef
+type RecDef = ["id" ::: Int64, "name" ::: T.Text, "val" ::: Maybe Double]
+type TabDef = Table Sqlite "tab" RecDef ["id"]
+
+pRecDef = Proxy RecDef
+pTabDef = Proxy TabDef
+rec1 = setRec pRecDef ["id" := 1, "name" := "Text"]
+rec2 = setRec pRecDef ["id" := 2, "name" := "Some", "val" := 1.2]
+rec3 = rec2 .~ ["id" := 3]
+rec4 = rec3 .~ ["id" := 4, "val" = 2]
+
+ins pTabDef [rec1,rec2,rec3,rec4]
+del pTabDef [3,2]
+upd pTabDef [rec1 .~ ["val" := 5]]
+
+-}
+
 type TRec1 = "id" :> Int64 +> "name" :> T.Text +> "val" :> Maybe Double
 type Tab1 = Table "tab1" TRec1 (Proxy '["id"])
 pTab1 = Proxy :: Proxy Tab1
@@ -96,6 +116,8 @@ sql = do
             sel pTab1 (Null (Proxy :: Proxy ("val" :> Maybe Double)))
                 >>= liftIO . mapM_ print
             sel pTab1 (NotNull (Proxy :: Proxy ("val" :> Maybe Double)))
+                >>= liftIO . mapM_ print
+            selProj pTab1 (Proxy :: Proxy ["id","val"]) (Not $ NotNull (Proxy :: Proxy ("val" :> Maybe Double)))
                 >>= liftIO . mapM_ print
             sel pTab1 (Not $ NotNull (Proxy :: Proxy ("val" :> Maybe Double)))
                 >>= liftIO . mapM_ print

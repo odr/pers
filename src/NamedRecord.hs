@@ -166,6 +166,7 @@ type family Diff a b where
 
 type family Proj a b where
     Proj () x = ()
+    Proj a (Proxy a)          = a
     Proj a (Proxy '[])  = ()
     Proj (n1:>v1) (n2:>v2)    = If (n1==n2 && (v1==v2 || v2 == ())) (n1:>v1) ()
     Proj (n1:>v1) (Proxy n2)  = If (n1==n2) (n1:>v1) ()
