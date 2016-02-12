@@ -42,17 +42,17 @@ newtype Table (n :: Symbol) rec pk = Table { tableRec :: rec }
             , Traversable, Foldable, Monoid, Default)
 -}
 type TableDef (n :: Symbol) (rec :: [ (Symbol, *) ]) (pk :: [Symbol])
-    =  '( "table" ::: n
-        , "rec" ::: rec
-        , "pk" ::: pk
+    =  '( "table"   ::: n
+        , "rec"     ::: rec
+        , "pk"      ::: pk
         )
 type family Conn backend
 type family FieldDB backend
 type family SessionParams backend
 
-type family PKDef (a :: k) :: [Symbol]
-type family DataRecordDef (a :: k) :: [(Symbol,*)]
-type family RecordDef (a :: k) :: [(Symbol,*)]
+type family KeyDef (a :: k)         :: [Symbol]
+type family DataRecordDef (a :: k)  :: [(Symbol,*)]
+type family RecordDef (a :: k)      :: [(Symbol,*)]
 
 type instance DataRecordDef (TableDef n rec pk) = MinusNames rec pk
 
