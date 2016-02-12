@@ -43,10 +43,8 @@ newtype Table (n :: Symbol) rec pk = Table { tableRec :: rec }
             , Traversable, Foldable, Monoid, Default)
 -}
 type TableDef (n :: Symbol) (rec :: [ (Symbol, *) ]) (pk :: [Symbol])
-    =  '( "table"   ::: n
-        , "rec"     ::: rec
-        , "pk"      ::: pk
-        )
+    = "table" ::: '("name" ::: n, "rec"::: rec, "pk" ::: pk)
+
 type family Conn backend
 type family FieldDB backend
 type family SessionParams backend
@@ -55,7 +53,9 @@ type family KeyDef (a :: k)         :: [Symbol]
 type family DataRecordDef (a :: k)  :: [(Symbol,*)]
 type family RecordDef (a :: k)      :: [(Symbol,*)]
 
+type instance KeyDef (TableDef n rec pk)        = pk
 type instance DataRecordDef (TableDef n rec pk) = MinusNames rec pk
+type instance RecordDef (TableDef n rec pk)     = rec
 
 type SessionMonad b m = ReaderT (Proxy b, Conn b) m
 
@@ -77,7 +77,7 @@ class DDL backend a where
 --   Database type is a type specified in db-library which
 --   present different db-types as a sum-type
 class FieldDDL backend (a :: *) where
-    typeName    :: Proxy# backend -> Proxy# a -> Text -- ^ name of type in database
+    typeName    :: Proxy# backend -> Proxy a -> Text -- ^ name of type in database
     nullStr     :: Proxy# backend -> Proxy# a -> Text -- ^ NULL or NOT NULL
     nullStr _ _ = "NOT NULL"
     toDb        :: Proxy# backend -> a -> FieldDB backend -- ^ value to database type
@@ -116,7 +116,7 @@ instance (FieldDDL b v, KnownSymbol n, RowDDL b nvs, Names (NRec nvs))
   where
     rowCreate pb (_ :: Proxy ((n:::v) ': nvs))
         = (format "{} {}{}" ( symbolVal' (proxy# :: Proxy# n)
-                            , typeName pb (proxy# :: Proxy# v)
+                            , typeName pb (Proxy :: Proxy v)
                             , if TL.null ns then "" else " " `mappend` ns
                             )
         :) . rowCreate pb (Proxy :: Proxy nvs)

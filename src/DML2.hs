@@ -9,6 +9,7 @@
 -- {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PolyKinds #-}
 module DML2 where
 
 import GHC.Prim(Proxy#, proxy#)
@@ -30,11 +31,12 @@ import NRTH
 import NamedRecord2
 import DDL2
 
-class DML back a where
+class DML back (a::k) where
     -- | Insert the list of values into database.
     -- Should create Insert-statement with parameters
     -- and execute it for all values in list
-    ins :: (MonadIO m, MonadMask m) => [a] -> SessionMonad back m ()
+    ins :: (MonadIO m, MonadMask m) => Proxy a -> [VRecRep (RecordDef a)]
+        -> SessionMonad back m ()
 --    upd :: (MonadIO m, MonadMask m) => [a] -> SessionMonad back m ()
 {-
     -- | Select part of values by condition
@@ -55,9 +57,12 @@ class DML back a where
         => Proxy a -> Cond back (RecordDef a) -> SessionMonad back m [VRecRep (RecordDef a)]
     -- sel (pa :: Proxy a) c = selProj pa (Proxy :: Proxy (Record a)) c
     selProj :: (MonadIO m, MonadMask m
-            , (b :\\ (NRec (RecordDef a))) ~ '[]
+            , (Null (b :\\ (NRec (RecordDef a)))) ~ True
             , Names b
-            , RowDDL back (ProjNames (RecordDef a) b))
+            , RowDDL back (ProjNames (RecordDef a) b)
+            , Names (Minus (NRec (RecordDef a)) b)
+            -- , (Null (Minus b (NRec (RecordDef a))) ~ True)
+            )
         => Proxy a -> Proxy b -> Cond back (RecordDef a)
         -> SessionMonad back m [VRecRep (ProjNames (RecordDef a) b)]
 
@@ -70,7 +75,7 @@ class DML back a where
 -- In all cases interface is the same.
 -- If we need sequence name (Oracle) we can derive it from table name.
 -- (Table name should be connected with 'DataRecord a')
-class InsAutoPK back a where
+class InsAutoPK back (a::k) where
     insAuto :: (MonadIO m, MonadMask m)
             => Proxy a -> [VRecRep (DataRecordDef a)]
             -> SessionMonad back m [VRecRep (ProjNames (RecordDef a) (KeyDef a))]
@@ -181,9 +186,9 @@ sqlWhere (x :: Cond back a) = case x of
 getSqlWhere :: (DBOption back) => Cond back a -> (Text, [FieldDB back])
 getSqlWhere c = let (r,_,w) = runRWS (sqlWhere c) () 1 in (r,w)
 
-selRecCmdPars :: (KnownSymbol t, RowDDL back r, Names a, DBOption back
-                , (Minus a (NRec r)) ~ '[])
-    => Proxy# (t::Symbol) -> Proxy# a -> Cond back r -> (Text,[FieldDB back])
+selRecCmdPars :: (KnownSymbol t, RowDDL back r, Names a, DBOption back)
+    => Proxy# (t::Symbol) -> Proxy# (a::[Symbol]) -> Cond back (r::[(Symbol,*)])
+            -> (Text,[FieldDB back])
 selRecCmdPars pt pa c =
     ( format "SELECT {} FROM {} WHERE {}"
         ( TL.intercalate "," $ map TL.pack ns
