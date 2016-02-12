@@ -18,7 +18,17 @@ singletons [d|
     minusBy                  :: (a -> b -> Bool) -> [a] -> [b] -> [a]
     minusBy f                = foldl (flip (deleteBy' (flip f)))
 
+    minus                    :: (Eq a) => [a] -> [a] -> [a]
+    minus                    = minusBy (==)
+
     eqFst :: (Eq a) => (a,b) -> a -> Bool
     eqFst a b = fst a == b
+
+    projBy             :: (a -> b -> Bool) -> [a] -> [b] -> [a]
+    projBy _  []       []       =  []
+    projBy _  []       (_:_)    =  []
+    projBy _  (_:_)    []       =  []
+    projBy f xs@(_:_) ys@(_:_) =  filter (\x -> any_ (f x) ys) xs
+
   |]
 

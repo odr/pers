@@ -55,11 +55,11 @@ type NRec (a :: [(k,*)]) = Map FstSym0 a
 type VRec (a :: [(k,*)]) = Map SndSym0 a
 type NVRec (a :: [k]) (b :: [*]) = Zip a b
 type VRecRep (a :: [(k,*)]) = ToRep (VRec a)
-type PVRecRep (a :: [(k,*)]) = (Proxy a, VRecRep a)
+-- type PVRecRep (a :: [(k,*)]) = (Proxy a, VRecRep a)
 type NVRecRep (a :: [k]) (b :: *) = NVRec a (FromRep b)
 
-type MinusByFst a b = MinusBy EqFstSym0 a b
-type MinusNames (a :: [(k,*)]) (b :: [k]) = MinusByFst a b
+type MinusNames (a :: [(k,*)]) (b :: [k]) = MinusBy EqFstSym0 a b
+type ProjNames  (a :: [(k,*)]) (b :: [k]) = ProjBy EqFstSym0 a b
 
 class Names (x :: [Symbol]) where
     symbols :: Proxy# x -> [SomeSymbol]
@@ -333,16 +333,6 @@ instance (ToRec a, ToRec b) => ToRec (a,b) where
     toRec (a,b) = case (toRec a, toRec b) of
         (Right x, Right y) -> Right (x,y)
         (x, y) -> Left $ concat $ lefts [x] ++ lefts [y]
-
--- | Does this type can have default (null) value.
---   True for Maybe and [] but not for String.
-type family HasDef a :: Bool where
-    HasDef (Maybe a) = True
-    HasDef String = False
-    HasDef [a] = True
-    HasDef (n:>v) = HasDef v
-    HasDef (a,b) = HasDef a && HasDef b
-    HasDef a = False
 
 class ToRecDef (b::Bool) a where
     toRecDef :: Proxy# b -> Maybe a
