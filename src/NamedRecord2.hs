@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 -- {-# LANGUAGE RankNTypes #-}
 -- {-# LANGUAGE FlexibleContexts #-}
--- {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE PolyKinds #-}
 -- {-# LANGUAGE DeriveFunctor #-}
 -- {-# LANGUAGE DeriveTraversable #-}
 -- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
