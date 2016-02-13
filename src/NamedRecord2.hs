@@ -3,8 +3,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MagicHash #-}
--- {-# LANGUAGE MultiParamTypeClasses #-}
--- {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 -- {-# LANGUAGE RankNTypes #-}
@@ -70,6 +70,19 @@ instance Names '[] where
 instance (KnownSymbol s, Names ss) => Names (s ': ss) where
     symbols _ = SomeSymbol (Proxy :: Proxy s) : symbols (proxy# :: Proxy# ss)
     names _ = symbolVal' (proxy# :: Proxy# s) : names (proxy# :: Proxy# ss)
+
+-- | Construct Named Record value by adding values
+class AddRec (a::[(k,*)]) (b::[(k,*)])
+  where
+    addRec :: (Proxy a) -> (Proxy b) -> VRecRep a -> VRecRep b -> VRecRep (a :++ b)
+
+instance AddRec '[] b where
+    addRec _ _ _ = id
+
+instance (Elem a c ~ False, AddRec b c) => AddRec (a ': b) c where
+    addRec _ _ (x,y) z = (x, addRec (Proxy :: Proxy b) (Proxy :: Proxy c) y z)
+
+
 
 
 {-
