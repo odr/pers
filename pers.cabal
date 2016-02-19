@@ -26,6 +26,7 @@ library
                         , containers
                         , persistent
                         , microlens
+                        , lens
                         , text
                         , text-format
                         , bytestring

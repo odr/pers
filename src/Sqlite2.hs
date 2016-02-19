@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TupleSections #-}
 module Sqlite2 where
 
 import Prelude as P
@@ -99,8 +100,8 @@ instance (RowDDL Sqlite a, KnownSymbol n, Names pk)
 runSqliteDDL :: (MonadIO m) => TL.Text -> SessionMonad Sqlite m ()
 runSqliteDDL cmd = ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
 
-instance AutoGenPK Sqlite Int64 where
-    getPK = ask >>= \(_,conn) -> liftIO (lastInsertRowId conn)
+instance AutoGenPK Sqlite (Int64,()) where
+    getPK = ask >>= \(_,conn) -> fmap (,()) (liftIO (lastInsertRowId conn))
 
 instance (Names (NRec a), KnownSymbol n, RowDDL Sqlite a)
     => DML Sqlite (TableDef n a pk)
@@ -170,7 +171,7 @@ instance (Names (NRec a), KnownSymbol n, RowDDL Sqlite a)
                 (finalize p)
       where
         (cmd,ps) = selRecCmdPars (proxy# :: Proxy# t)
-                (proxy# :: Proxy# (Minus (NRec a) b)) c
+                (proxy# :: Proxy# b) c
         loop p frs = do
             res <- step p
             if res == Done

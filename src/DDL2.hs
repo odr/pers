@@ -91,6 +91,7 @@ type family HasDef a :: Bool where
     HasDef [a] = True
     -- HasDef (n:>v) = HasDef v
     HasDef (a,b) = HasDef a && HasDef b
+    HasDef () = True
     HasDef a = False
 
 
@@ -123,7 +124,7 @@ instance (FieldDDL b v, KnownSymbol n, RowDDL b nvs, Names (NRec nvs))
       where
         ns = nullStr pb (proxy# :: Proxy# v)
 
-    toRowDb pb _ (v,_) = (toDb pb v :)
+    toRowDb pb _ (v,vs) = (toDb pb v :) . toRowDb pb (Proxy :: Proxy nvs) vs
     fromRowDb pb (_ :: Proxy ((n ::: v) ': nvs)) fs
         = case fs of
             []      -> Left $ symbols (proxy# :: Proxy# (n ': NRec nvs))

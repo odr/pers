@@ -7,8 +7,6 @@ import Data.Singletons.Prelude
 import Data.Singletons.Prelude.List
 import Data.Singletons.TH
 import Data.List
-{-
--}
 
 singletons [d|
     deleteBy'                :: (a -> b -> Bool) -> a -> [b] -> [b]
