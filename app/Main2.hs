@@ -26,38 +26,15 @@ import qualified Data.Text.Lazy.IO as TIO
 import Control.Monad.Trans.Reader(runReaderT)
 import Control.Monad.IO.Class(MonadIO(..))
 import Control.Monad.Catch
-import           Database.SQLite3 -- .Simple
+import Database.SQLite3
 import qualified Data.Text as T
 import Lens.Micro
 
-import NamedRecord2 -- (Lifted)
--- import NamedRecordData -- (Person, defPerson)
--- import PersistRec
+import NamedRecord2
+
 import DDL2
 import Sqlite2
 import DML2
-
-{-
-should be:
-data TableDef back name recdef pkdef
-type RecDef = ["id" ::: Int64, "name" ::: T.Text, "val" ::: Maybe Double]
-type TabDef = Table Sqlite "tab" RecDef ["id"]
-
-pRecDef = Proxy RecDef
-pTabDef = Proxy TabDef
-rec1 = setRec pRecDef ["id" := 1, "name" := "Text"]
--- or rec1 = setRec pRecDef [a 1 :: Add "id", a "name" :: Add "Text"]
--- (1,("name",(Nothing,())))
--- (1,).("name",).(Nothing,) () :: VRecRep RecDef
-rec2 = setRec pRecDef ["id" := 2, "name" := "Some", "val" := 1.2]
-rec3 = rec2 .~ ["id" := 3]
-rec4 = rec3 .~ ["id" := 4, "val" = 2]
-
-ins pTabDef [rec1,rec2,rec3,rec4]
-del pTabDef [3,2]
-upd pTabDef [rec1 .~ ["val" := 5]]
-
--}
 
 type Rec1 = '["id":::Int64,"name":::T.Text,"val":::Maybe Double]
 type Tab1 = TableDef "tab1" Rec1 '["id"]
@@ -66,11 +43,9 @@ pTab1 = Proxy :: Proxy Tab1
 
 rec1 = (1,).("text1",).(Nothing,) $ ()
 rec2 = (2,).("text2",).(Just 2.2,) $ ()
---lensRec1 :: (RecLens Rec1 a) => Proxy# (a::[( Symbol,*)]) -> Lens' (VRecRep Rec1) (VRecRep a)
 lensRec1 = recLens (proxy#::Proxy# Rec1)
 
 type IdName = '["id":::Int64,"name":::T.Text]
--- lensIdName :: Lens' (VRecRep Rec1) (VRecRep IdName)
 lensIdName = lensRec1 (proxy# :: Proxy# IdName)
 lensId = lensRec1 (proxy#::Proxy# '["id":::Int64])
 pId = Proxy :: Proxy '["id":::Int64]
@@ -79,7 +54,6 @@ pVal' = pNRec pVal
 pIdVal = Proxy :: Proxy '["id":::Int64,"val":::Maybe Double]
 pIdVal' = pNRec pIdVal
 pIdName = Proxy :: Proxy '["id":::Int64,"name":::T.Text]
--- {-
 
 sql :: IO ()
 sql = do
@@ -127,8 +101,6 @@ sql = do
                 >>= liftIO . mapM_ print
             sel pTab1 (Not $ NotNull pVal')
                 >>= liftIO . mapM_ print
-{-
--}
 
             -- TODO обработка ошибок
             -- TODO внешние ключи
@@ -142,4 +114,3 @@ sql = do
 main :: IO ()
 main = do
     sql
--- -}

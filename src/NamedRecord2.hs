@@ -18,7 +18,8 @@
 module NamedRecord2
     where
 
-import Data.Singletons.Prelude -- hiding (type (:==))
+import Data.Singletons.Prelude
+import Data.Singletons.TypeRepStar()
 import Data.Promotion.Prelude.List
 import GHC.TypeLits -- (Symbol, KnownSymbol, SomeSymbol(..), KnownNat, symbolVal, natVal)
 import GHC.Prim(Proxy#, proxy#)
@@ -29,8 +30,8 @@ import Control.Lens
 
 import NRTH
 
-instance PEq ('KProxy :: KProxy *) where
-    type (:==) (x:: *) (y:: *) = x == y
+--   where
+--     type (:==) (x:: *) (y:: *) = x == y
 
 -- using sMap and Map
 -- :t sMap (singFun1 (Proxy::Proxy SndSym0) sSnd) (sing :: Sing '[ '("x",False), '("y",True) ])
