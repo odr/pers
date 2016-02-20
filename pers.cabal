@@ -15,18 +15,15 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:      NamedRecord
-                        , PersistRec
-                        , DDL
-                        , DML
-                        , Sqlite
+  exposed-modules:      Pers.Types
+                        , Pers.TH
+                        , Pers.Database.DDL
+                        , Pers.Database.DML
+                        , Pers.Database.Sqlite.Sqlite
   build-depends:       base >= 4.8 && < 5
                         , ghc-prim >= 0.4
                         , data-default
-                        , containers
-                        , persistent
                         , microlens
-                        , lens
                         , text
                         , text-format
                         , bytestring
@@ -39,22 +36,14 @@ library
 executable pers-exe
   hs-source-dirs:      app
   main-is:             Main.hs
-  other-modules:        NamedRecordData
 
   ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200 +RTS -s -A256M -RTS
   build-depends:       base
                         , ghc-prim >= 0.4
-                        , data-default
-                        , containers
-                        , persistent
                         , microlens
                         , pers
-                        , direct-sqlite
                         , text
-                        , bytestring
                         , transformers
-                        , exceptions
-                        , singletons
   default-language:    Haskell2010
 
 test-suite pers-test
