@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Pers.Database.Sqlite.Sqlite where
 
 import Prelude as P
@@ -128,34 +129,6 @@ instance (Names (NRec a), KnownSymbol n, Single rep, RowRepDDL rep Sqlite a)
       where
         (cmd,ps) = delRecCmdPars (proxy# :: Proxy# n) c
 
-    sel (_::Proxy '(rep, TableDef t a pk)) c = do
-        (_,conn) <- ask
-        liftIO $ do
-            P.print cmd
-            P.print ps
-            p <- prepare conn $ TL.toStrict cmd
-            bind p ps
-            finally
-                (loop p id) -- TODO: to make conduit (or pipe)
-                (finalize p)
-      where
-        (cmd,ps) = selRecCmdPars (Proxy :: Proxy '(rep,t,NRec a)) c
-        loop p frs = do
-            res <- step p
-            if res == Done
-                then return (frs [])
-                else fmap (\r -> frs
-                        . (checkErr (fromRowDb (proxy# :: Proxy# '(rep,Sqlite))
-                                                (Proxy :: Proxy a)
-                                                r) :))
-                        (columns p >>= return <* P.print)
-                    >>= loop p
-          where
-            checkErr er = case er of
-                Left ss -> error
-                    $ "Invalid Select. Error in column conversion with fields "
-                    ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
-                Right a -> a
     selProj (_::Proxy '(rep,TableDef t a pk,b)) c = do
         (_,conn) <- ask
         liftIO $ do

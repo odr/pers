@@ -48,13 +48,6 @@ class DML (rep::Rep) back (a::k) where
     -- Count of deleted records is returned
     del :: (MonadIO m, MonadMask m)
         => Proxy '(rep,a) -> Cond rep back (RecordDef a) -> SessionMonad back m Int
-    -- | Select values by condition
-    sel :: (MonadIO m, MonadMask m)
-            => Proxy '(rep,a)
-            -> Cond rep back (RecordDef a)
-            -> SessionMonad back m [VRec rep (RecordDef a)]
-    -- sel (pa :: Proxy a) c = selProj pa (Proxy :: Proxy (Record a)) c
-    -- | Select part of values by condition
     selProj :: (MonadIO m, MonadMask m
             , (b :\\ NRec (RecordDef a)) ~ '[]
             , Names b
@@ -64,6 +57,10 @@ class DML (rep::Rep) back (a::k) where
         => Proxy '(rep,a,b) -> Cond rep back (RecordDef a)
         -> SessionMonad back m [VRec rep (ProjNames (RecordDef a) b)]
 
+-- | Select values by condition
+sel (_::Proxy '(rep, a))
+    = selProj (Proxy :: Proxy '(rep,a,NRec (RecordDef a)))
+
 -- | In many cases PK should be generated.
 -- There are some possibilities:
 --
@@ -72,7 +69,6 @@ class DML (rep::Rep) back (a::k) where
 --
 -- In all cases interface is the same.
 -- If we need sequence name (Oracle) we can derive it from table name.
--- (Table name should be connected with 'DataRecord a')
 class InsAutoPK (rep::Rep) back (a::k) where
     insAuto :: (MonadIO m, MonadMask m)
             => Proxy '(rep,a) -> [VRec rep (DataRecordDef a)]
