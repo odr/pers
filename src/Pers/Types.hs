@@ -81,6 +81,7 @@ instance (KnownSymbol s, Names ss) => Names (s ': ss) where
     names _ = symbolVal' (proxy# :: Proxy# s) : names (proxy# :: Proxy# ss)
 
 
+{-
 -- | Construct Named Record value by adding values
 class AddRec (rep::Rep) (a::[(k,*)]) (b::[(k,*)])
   where
@@ -91,7 +92,7 @@ instance AddRec rep '[] b where
 
 instance (Elem a c ~ False, AddRec Plain b c) => AddRec Plain (a ': b) c where
     addRec _ (x,y) z = (x, addRec (proxy# :: Proxy# '(Plain,b,c)) y z)
-
+-}
 
 -- | Lens
 class RecLens (rep::Rep) b a where

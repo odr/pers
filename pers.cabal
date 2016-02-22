@@ -37,7 +37,7 @@ executable pers-exe
   hs-source-dirs:      app
   main-is:             Main.hs
 
-  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200 +RTS -s -A256M -RTS
+  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fcontext-stack=200 +RTS -s -A128M -RTS
   build-depends:       base
                         , ghc-prim >= 0.4
                         , microlens

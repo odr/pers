@@ -56,10 +56,10 @@ class DML (rep::Rep) back (a::k) where
     -- sel (pa :: Proxy a) c = selProj pa (Proxy :: Proxy (Record a)) c
     -- | Select part of values by condition
     selProj :: (MonadIO m, MonadMask m
-            , (Null (b :\\ (NRec (RecordDef a)))) ~ True
+            , (b :\\ NRec (RecordDef a)) ~ '[]
             , Names b
             , RowRepDDL rep back (ProjNames (RecordDef a) b)
-            , Names (Minus (NRec (RecordDef a)) b)
+            , Names ((NRec (RecordDef a) :\\ KeyDef a) :\\ b)
             )
         => Proxy '(rep,a,b) -> Cond rep back (RecordDef a)
         -> SessionMonad back m [VRec rep (ProjNames (RecordDef a) b)]
@@ -117,19 +117,19 @@ class AutoGenPK back a where
     getPK :: (MonadIO m) => SessionMonad back m a
 
 data Cond (rep::Rep) back (a :: [(Symbol,*)])
-    = forall b. (Names (NRec b), RowRepDDL rep back b, Minus b a ~ '[])
+    = forall b. (Names (NRec b), RowRepDDL rep back b, (b :\\ a) ~ '[])
         => Equal (Proxy b) (VRec rep b)
-    | forall s b. (KnownSymbol s, RowRepDDL rep back '[s:::b], Minus '[s:::b] a ~ '[])
+    | forall s b. (KnownSymbol s, RowRepDDL rep back '[s:::b], Elem (s:::b) a ~ True)
         => In (Proxy '(rep,back,s)) [b]
     | forall b. (HasDef (VRec rep (ProjNames a b)) ~ True
-                , Names b, Minus b (NRec a) ~ '[])
+                , Names b, (b :\\ NRec a) ~ '[])
         => Null (Proxy b) -- | All fields in subrecord is null
     | forall b. (HasDef (VRec rep (ProjNames a b)) ~ True
-                , Names b, Minus b (NRec a) ~ '[])
+                , Names b, (b :\\ NRec a) ~ '[])
         => NotNull (Proxy b) -- | All fields in subrecord is not null
-    | forall b. (Names (NRec b), RowRepDDL rep back b, Minus b a ~ '[])
+    | forall b. (Names (NRec b), RowRepDDL rep back b, (b :\\ a) ~ '[])
         => Great (Proxy b) (VRec rep b)
-    | forall b. (Names (NRec b), RowRepDDL rep back b, Minus b a ~ '[])
+    | forall b. (Names (NRec b), RowRepDDL rep back b, (b :\\ a) ~ '[])
         => Least (Proxy b) (VRec rep b)
     | And [Cond rep back a]
     | Or  [Cond rep back a]

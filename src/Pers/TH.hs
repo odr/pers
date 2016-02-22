@@ -16,8 +16,8 @@ singletons [d|
     minusBy                  :: (a -> b -> Bool) -> [a] -> [b] -> [a]
     minusBy f                = foldl (flip (deleteBy' (flip f)))
 
-    minus                    :: (Eq a) => [a] -> [a] -> [a]
-    minus                    = minusBy (==)
+    -- minus                    :: (Eq a) => [a] -> [a] -> [a]
+    -- minus                    = minusBy (==)
 
     eqFst :: (Eq a) => (a,b) -> a -> Bool
     eqFst a b = fst a == b
