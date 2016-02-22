@@ -66,8 +66,10 @@ type VRec (rep::Rep) (a :: [(k,*)]) = ToRep rep (Map SndSym0 a)
 pNRec :: Proxy a -> Proxy (NRec a)
 pNRec (_::Proxy a) = Proxy :: Proxy (NRec a)
 
-type MinusNames (a :: [(k,*)]) (b :: [k]) = If (NRec a == b) '[] (MinusBy EqFstSym0 a b)
-type ProjNames  (a :: [(k,*)]) (b :: [k]) = If (NRec a == b) a (ProjBy EqFstSym0 a b)
+type MinusNames (a :: [(k,*)]) (b :: [k])
+    = {- If (NRec a == b) '[] -} (MinusBy EqFstSym0 a b)
+type ProjNames  (a :: [(k,*)]) (b :: [k])
+    = {- If (NRec a == b) a   -} (ProjBy EqFstSym0 a b)
 
 
 class Names (x :: [Symbol]) where
