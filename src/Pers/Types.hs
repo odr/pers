@@ -7,7 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeSynonymInstances #-}
--- {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TupleSections #-}
@@ -98,12 +98,15 @@ instance (Elem a c ~ False, AddRec Plain b c) => AddRec Plain (a ': b) c where
 
 -- | Lens
 class RecLens (rep::Rep) b a where
-    recLens :: (Functor f) => Proxy# '(rep,b,a)
-            -> (VRec rep a -> f (VRec rep a)) -> VRec rep b -> f (VRec rep b)
+    recLens -- :: (Functor f) =>
+        :: Proxy# '(rep,b,a) -> Lens' (VRec rep b) (VRec rep a)
+            -- -> (VRec rep a -> f (VRec rep a)) -> VRec rep b -> f (VRec rep b)
 
 class RecLensB (rep::Rep) b a (isEq :: Bool) where
-    recLensB :: (Functor f) => Proxy# '(rep,b,a) -> Proxy# (isEq::Bool)
-            -> (VRec rep a -> f (VRec rep a)) -> VRec rep b -> f (VRec rep b)
+    recLensB -- :: (Functor f) =>
+        :: Proxy# '(rep,b,a) -> Proxy# (isEq::Bool)
+            -> Lens' (VRec rep b) (VRec rep a)
+            -- -> (VRec rep a -> f (VRec rep a)) -> VRec rep b -> f (VRec rep b)
 
 instance (RecLensB rep (b ': bs) '[a] (a==b)) => RecLens rep (b ': bs) (a ': '[])
   where

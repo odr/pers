@@ -23,10 +23,13 @@ import Database.SQLite3 -- (SQLData(..), Database, exec, prepare, step, bind, fi
 import Data.Int(Int64)
 import qualified Data.Text.Lazy as TL
 import Data.Text.Format -- (format)
+import Control.Monad(foldM)
 import Control.Monad.Trans.Reader(ReaderT(..), ask)
 import Control.Monad.Trans.RWS(RWS(..))
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.List(intercalate)
+import Lens.Micro((^.))
+import Data.Promotion.Prelude.List((:\\))
 
 import Pers.TH
 import Pers.Types
@@ -105,7 +108,18 @@ runSqliteDDL cmd = ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
 instance AutoGenPK Sqlite (Int64,()) where
     getPK = ask >>= \(_,conn) -> fmap (,()) (liftIO (lastInsertRowId conn))
 
-instance (Names (NRec a), KnownSymbol n, Single rep, RowRepDDL rep Sqlite a)
+instance    ( Names (NRec a)
+            , KnownSymbol n
+            , Single rep
+            , (ProjNames a pk :\\ a) ~ '[]
+            , RecLens rep a (ProjNames a pk)
+            , RecLens rep a (MinusNames a pk)
+            , Names (NRec (MinusNames a pk))
+            , Names (NRec (ProjNames a pk))
+            , RowRepDDL rep Sqlite a
+            , RowRepDDL rep Sqlite (ProjNames a pk)
+            , RowRepDDL rep Sqlite (MinusNames a pk)
+            )
     => DML rep Sqlite (TableDef n a pk)
   where
     ins (_::Proxy '(rep, TableDef n a pk)) rs
@@ -113,11 +127,29 @@ instance (Names (NRec a), KnownSymbol n, Single rep, RowRepDDL rep Sqlite a)
             (_,conn) <- ask
             liftIO $ P.print (cmd, pss)
             stat <- liftIO $ prepare conn $ TL.toStrict cmd
-            -- liftIO $ mapM_ (\ps -> insRow stat ps) pss
-            liftIO $ finally (mapM_ (\ps -> insRow stat ps) pss)
+            liftIO $ finally (mapM_ (\ps -> stepRow stat ps) pss)
                              (finalize stat)
       where
         (cmd, pss) = insRecCmdPars (Proxy :: Proxy '(rep,Sqlite,n,a)) rs
+
+    upd (p1::Proxy '(rep, TableDef n a pk)) rs
+        = do
+            (_,conn) <- ask
+            liftIO $ P.print (cmd, pss)
+            stat <- liftIO $ prepare conn $ TL.toStrict cmd
+            liftIO $ finally
+                (fmap ($ [])
+                    $ foldM (\f (r,ps) -> do
+                            stepRow stat ps
+                            cnt <- changes conn
+                            return $
+                                if cnt == 1 then f.(r ^. (lensPk p1) :) else f
+                        ) id $ zip rs pss
+                )
+                (finalize stat)
+      where
+        p2 = Proxy :: Proxy '(rep,Sqlite,TableDef n a pk)
+        (cmd,pss) = updRecCmdPars p2 rs
 
     del (_ :: Proxy '(rep, TableDef n a pk)) c = do
         (_,conn) <- ask
@@ -132,8 +164,7 @@ instance (Names (NRec a), KnownSymbol n, Single rep, RowRepDDL rep Sqlite a)
     selProj (_::Proxy '(rep,TableDef t a pk,b)) c = do
         (_,conn) <- ask
         liftIO $ do
-            P.print cmd
-            P.print ps
+            P.print (cmd, ps)
             p <- prepare conn $ TL.toStrict cmd
             bind p ps
             finally
@@ -167,15 +198,15 @@ instance (KnownSymbol t, Names (NRec (MinusNames a pk))
     insAuto (_::Proxy '(rep, TableDef t a pk)) rs = do
         (_,conn) <- ask
         stat <- liftIO $ prepare conn $ TL.toStrict cmd
-        finally (mapM (\ps -> liftIO (insRow stat ps) >> getPK) pss)
+        finally (mapM (\ps -> liftIO (stepRow stat ps) >> getPK) pss)
                 (liftIO $ finalize stat)
       where
         (cmd, pss)= insRecCmdPars
                         (Proxy :: Proxy '(rep,Sqlite,t,MinusNames a pk))
                         rs
 
-insRow :: Statement -> [SQLData] -> IO ()
-insRow stat ps = do
+stepRow :: Statement -> [SQLData] -> IO ()
+stepRow stat ps = do
     reset stat
     bind stat ps
     step stat

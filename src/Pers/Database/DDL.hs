@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -13,6 +14,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PolyKinds #-}
+-- {-# LANGUAGE RankNTypes #-}
 module Pers.Database.DDL where
 
 import Data.Proxy(Proxy(..))
@@ -28,7 +30,10 @@ import Control.Monad.IO.Class(MonadIO)
 import Control.Monad.Trans.Reader(ReaderT)
 import Control.Monad.Catch
 import Data.Type.Equality((:~:)(..), castWith)
-
+-- import Control.Lens(Lens', (^.))
+-- import Control.Lens.Getter(Getting)
+import Lens.Micro(Lens', (^.))
+import Lens.Micro.Type(Getting)
 import Data.Promotion.Prelude.List
 
 import Pers.Types -- (RecStack(..), Init, Last, (:>)(..), Diff)
@@ -49,13 +54,23 @@ type family Conn backend
 type family FieldDB backend
 type family SessionParams backend
 
+type family TabName (a :: k)        :: Symbol
 type family KeyDef (a :: k)         :: [Symbol]
 type family DataRecordDef (a :: k)  :: [(Symbol,*)]
 type family RecordDef (a :: k)      :: [(Symbol,*)]
 
+type instance TabName (TableDef n rec pk)       = n
 type instance KeyDef (TableDef n rec pk)        = pk
 type instance DataRecordDef (TableDef n rec pk) = MinusNames rec pk
 type instance RecordDef (TableDef n rec pk)     = rec
+
+type Key a = ProjNames (RecordDef a) (KeyDef a)
+
+{-
+class ( (Key t :\\ RecordDef t) ~ '[]
+        , NRec (Key t) ~ KeyDef t)
+      ) => DBRule t where
+-}
 
 type SessionMonad b m = ReaderT (Proxy b, Conn b) m
 
@@ -147,3 +162,43 @@ rowDb :: RowRepDDL rep backend a => Proxy# '(rep, backend) -> Proxy a
         -> VRec rep a -> [FieldDB backend]
 rowDb prb pa v = toRowDb prb pa v []
 
+-- lensPk :: (Functor f, RecLens rep (RecordDef a) (Key a))
+--     => Proxy '(rep,a) -> Lens' (VRec rep (RecordDef a)) (VRec rep (Key a))
+lensPk (_::Proxy '(rep,a))
+    = recLens (proxy#::Proxy#  '( rep, RecordDef a, Key a ))
+
+lensData (_::Proxy '(rep,a))
+    = recLens (proxy#::Proxy#  '( rep, RecordDef a, DataRecordDef a ))
+
+-- recPk :: (RecLens rep (RecordDef a) (Key a))
+--     => Proxy '(rep,a) -> (VRec rep (Key a)) -> (VRec rep (RecordDef a))
+-- recPk   p r = lensPk   p ^. r
+-- recData p r = lensData p ^. r
+
+
+{-
+recDbPk
+    :: (Functor f, RecLens rep (RecordDef a) (Key a), RowRepDDL rep back (Key a))
+    => Proxy '(rep, back, a)
+--         -> VRec rep (RecordDef a)
+        -> Getting
+              (VRec rep (Key a))
+              ((VRec rep (Key a) -> f (VRec rep (Key a)))
+                -> VRec rep (RecordDef a) -> f (VRec rep (RecordDef a)))
+              (VRec rep (Key a))
+        -> [FieldDB back]
+-}
+recDbPk :: (RecLens rep (RecordDef a) (Key a), RowRepDDL rep back (Key a))
+    => Proxy '(rep, back, a) -> VRec rep (RecordDef a) -> [FieldDB back]
+recDbPk (_::Proxy '(rep,back,a)) rec -- :: VRec rep (RecordDef a))
+    = rowDb (proxy# :: Proxy# '(rep,back))
+            (Proxy :: Proxy (Key a))
+            (rec ^. lensPk (Proxy :: Proxy '(rep,a)))
+
+recDbData :: (RecLens rep (RecordDef a) (DataRecordDef a)
+            , RowRepDDL rep back (DataRecordDef a))
+    => Proxy '(rep, back, a) -> VRec rep (RecordDef a) -> [FieldDB back]
+recDbData (_::Proxy '(rep,back,a)) rec -- :: VRec rep (RecordDef a))
+    = rowDb (proxy# :: Proxy# '(rep,back))
+            (Proxy :: Proxy (DataRecordDef a))
+            (rec ^. lensData (Proxy :: Proxy '(rep,a)))

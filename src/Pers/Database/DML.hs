@@ -26,6 +26,7 @@ import Data.Type.Bool -- (type (||))
 import Data.Text.Format(format, Only(..))
 import Data.Promotion.Prelude.List
 import Data.List(intercalate)
+import Lens.Micro((^.))
 
 import Pers.TH
 import Pers.Types
@@ -37,13 +38,9 @@ class DML (rep::Rep) back (a::k) where
     -- and execute it for all values in list
     ins :: (MonadIO m, MonadMask m) => Proxy '(rep,a) -> [VRec rep (RecordDef a)]
         -> SessionMonad back m ()
---    upd :: (MonadIO m, MonadMask m) => [a] -> SessionMonad back m ()
-{-
-    -- | update values with
-    upd :: (MonadIO m, MonadMask m, Has a b)
-        => Proxy a -> b -> Maybe (Cond back (Record a))
-                -> SessionMonad back m Int
--}
+    -- | Simple update by pk. Return list of pk which were updated
+    upd :: (MonadIO m, MonadMask m) => Proxy '(rep,a) -> [VRec rep (RecordDef a)]
+        -> SessionMonad back m [VRec rep (Key a)]
     -- | Delete values by condition.
     -- Count of deleted records is returned
     del :: (MonadIO m, MonadMask m)
@@ -61,6 +58,13 @@ class DML (rep::Rep) back (a::k) where
 sel (_::Proxy '(rep, a))
     = selProj (Proxy :: Proxy '(rep,a,NRec (RecordDef a)))
 
+upsert (p :: Proxy '(rep,a)) (xs::[VRec rep (RecordDef a)]) = do
+    res <- upd p xs
+    ins p $ filter (\x -> not $ (x ^. lensPk p) `elem` res) xs
+--  where
+--    lensPk = recLens (proxy#::Proxy# '(rep,RecordDef a,ProjNames (RecordDef a) (KeyDef a)))
+
+
 -- | In many cases PK should be generated.
 -- There are some possibilities:
 --
@@ -72,7 +76,7 @@ sel (_::Proxy '(rep, a))
 class InsAutoPK (rep::Rep) back (a::k) where
     insAuto :: (MonadIO m, MonadMask m)
             => Proxy '(rep,a) -> [VRec rep (DataRecordDef a)]
-            -> SessionMonad back m [VRec rep (ProjNames (RecordDef a) (KeyDef a))]
+            -> SessionMonad back m [VRec rep (Key a)]
 
 insRecCmd :: (KnownSymbol t, RowRepDDL rep back r, Names (NRec r), DBOption back)
     => Proxy '(rep,back,t,r) -> Text
@@ -87,27 +91,45 @@ insRecCmd (_ :: Proxy '(rep,back,t,r))
   where
     ns = names (proxy# :: Proxy# (NRec r))
 
-{-
-updRecCmdPars :: (KnownSymbol t, RowDDL back r, NamesList r, DBOption back)
-    => Proxy# back -> Proxy# (t::Symbol) -> Proxy# pk -> [r] -> (Text, [[FieldDB back]])
-updRecCmdPars _ _ _ [] = mempty
-updRecCmdPars pb pt (ppk :: Proxy# pk) ((r:rs) :: [r])
-    = format "UPDATE {} SET {} WHERE {}"
-        ( symbolVal' pt
-        , TL.intercalate ","
-            $ zipWith
-                (\num name -> format "{} = {}" (TL.pack name, paramName pb num))
-                [1..] ns
-        , TL.intercalate "," $ zipWith (\n -> const $ paramName pb n) [1..] ns
-        )
-  where
-    ns = namesStrL (proxy# :: Proxy# r)
-    (w,ps) = getSqlWhere $ Equal $ rs ^. (recLens :: Lens' r pk)
--}
 insRecCmdPars :: (KnownSymbol t, RowRepDDL rep back r, Names (NRec r), DBOption back)
     => Proxy '(rep,back,t,r) -> [VRec rep r] -> (Text, [[FieldDB back]])
 insRecCmdPars (p::Proxy '(rep,back,t,r)) rs
     = (insRecCmd p, map (rowDb (proxy# :: Proxy# '(rep,back)) (Proxy::Proxy r)) rs)
+
+updRecCmdPars
+    :: (KnownSymbol (TabName t)
+        , RowRepDDL rep back (DataRecordDef t)
+        , RowRepDDL rep back (Key t)
+        , RecLens rep (RecordDef t) (Key t)
+        , RecLens rep (RecordDef t) (DataRecordDef t)
+        , DBOption back
+        , (Key t :\\ RecordDef t) ~ '[]
+        , Names (NRec (Key t))
+        , Names (NRec (DataRecordDef t))
+        , Single rep
+        )
+    => Proxy '(rep,back,t) -> [VRec rep (RecordDef t)] -> (Text, [[FieldDB back]])
+updRecCmdPars (_ :: Proxy '(rep,back,t)) [] = mempty
+updRecCmdPars (proxy :: Proxy '(rep,back,t)) (rec:recs)
+    =   ( format "UPDATE {} SET {} WHERE {}"
+            ( symbolVal' (proxy# :: Proxy# (TabName t))
+            , TL.intercalate ","
+                $ zipWith (\n s ->
+                        format "{} = {}" (s, paramName (proxy# :: Proxy# back) n)
+                    ) [1..] ns
+            , w
+            )
+        , (dataDb rec ++ p) : map ((++) <$> dataDb <*> keyDb) recs
+        )
+  where
+    ns = names (proxy# :: Proxy# (NRec (DataRecordDef t)))
+    (w,_,p) = runRWS (sqlWhere $ cond key) () (length ns + 1)
+      where
+        cond r = Equal (Proxy :: Proxy (Key t)) r :: Cond rep back (RecordDef t)
+        key = rec ^. recLens (proxy#::Proxy# '(rep,RecordDef t,Key t))
+        -- pRepRec = (Proxy :: Proxy '(rep,RecordDef t))
+    keyDb   = recDbPk   proxy
+    dataDb  = recDbData proxy
 
 class AutoGenPK back a where
     getPK :: (MonadIO m) => SessionMonad back m a

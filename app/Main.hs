@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
 module Main where
 
@@ -17,15 +18,16 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TIO
 import Control.Monad.IO.Class(MonadIO(..))
 import qualified Data.Text as T
+import Control.Monad.Catch
 
 import Pers.Types((:::),Rep(Plain),VRec,recLens,pNRec)
 import Pers.Database.DDL(TableDef, runSession, DDL(..))
-import Pers.Database.DML(DML(..),Cond(..),InsAutoPK(..))
+import Pers.Database.DML(DML(..),Cond(..),InsAutoPK(..),sel)
 import Pers.Database.Sqlite.Sqlite(sqlite)
 
 type Rec1 = '["id":::Int64,"name":::T.Text,"val":::Maybe Double
              ,"x":::Int64, "z":::T.Text, "y"::: Maybe T.Text
-             ,"1":::Int64,"2":::Int64,"3":::Int64
+             ,"_1":::Int64,"_2":::Int64,"_3":::Int64
              -- ,"4":::Int64,"5":::Int64,"6":::Int64
              -- ,"7":::Int64,"8":::Int64,"9":::Int64
              -- ,"10":::Int64,"11":::Int64,"12":::Int64
@@ -47,6 +49,10 @@ type IdName = '["id":::Int64,"name":::T.Text]
 lensIdName :: Lens' (VRec Plain Rec1) (VRec Plain IdName)
 lensIdName = recLens (proxy# :: Proxy# '(Plain,Rec1,IdName))
 
+-- type Name2 = '["name":::T.Text]
+-- lensName2 :: Lens' (VRec Plain Rec1) (VRec Plain IdName)
+-- lensName2 = recLens (proxy# :: Proxy# '(Plain,Rec1,IdName))
+
 lensId = recLens (proxy# :: Proxy# '(Plain,Rec1,'["id":::Int64]))
 pId = Proxy :: Proxy '["id":::Int64]
 pVal = Proxy :: Proxy '["val":::Maybe Double]
@@ -56,7 +62,7 @@ pIdName = Proxy :: Proxy '["id":::Int64,"name":::T.Text]
 sql :: IO ()
 sql = do
     runSession sqlite "test.db" (do
-            dropTable pTab1'
+            catch (dropTable pTab1') (\(_::SomeException) -> return ())
             createTable pTab1'
 
             step1
@@ -77,12 +83,16 @@ sql = do
         del pTab1 (Equal pId (1,()))
             >>= liftIO . print
         ins pTab1 [rec1]
+        upd pTab1   [ rec1
+                    & (recLens (proxy# :: Proxy# '(Plain,Rec1,'["name":::T.Text,"_2":::Int64])))
+                    .~ (("updated!",).(100500,) $ ())
+                    ]
         insAuto pTab1 [("text auto 2",).(Just 2.1,).(10,).("test",).(Just "note2",).r0 {- -} $ ()]
             >>= liftIO . print
+        sel pTab1 CondTrue >>= liftIO . mapM_ print
         return ()
     {-
     step2 = do
-        sel pTab1 CondTrue >>= liftIO . mapM_ print
         sel pTab1 (Equal pIdName (rec1 ^. lensIdName)) >>= liftIO . mapM_ print
         sel pTab1 (Equal pRec1 rec2) >>= liftIO . mapM_ print
         del pTab1 $ Equal pId (2,())
