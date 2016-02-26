@@ -22,6 +22,7 @@ import GHC.Prim(Proxy#, proxy#)
 import Data.Proxy(Proxy(..))
 import Data.Type.Equality(type (==))
 import Lens.Micro(Lens', (^.), (.~), (&), lens)
+import GHC.Exts(Constraint)
 -- import Control.Lens
 
 -- import Pers.TH
@@ -103,7 +104,6 @@ instance (Rep Plain (b ': bs) (x,xs), RecLens Plain bs '[a] xs (y,()))
         = fmap (x,)
         $ recLens (proxy# :: Proxy# '(Plain,bs,'[a])) f y
 
-
 type family NRec (a :: [(k1,k2)]) :: [k1] where
     NRec '[] = '[]
     NRec ('(a,b) ': xs) = a ': NRec xs
@@ -117,6 +117,21 @@ type family MinusNames (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     MinusNames ( '(a,b) ': xs ) '[c] = '(a,b) ': MinusNames xs '[c]
     MinusNames xs (y ': ys) = MinusNames (MinusNames xs '[y]) ys
 
+type family ContainNames (a :: [(k,k2)]) (b :: [k]) :: Constraint where
+    ContainNames as '[] = ()
+    ContainNames ('(a,v) ': as) '[a] = ()
+    ContainNames ('(a,v) ': as) '[b] = ContainNames as '[b]
+    ContainNames as (b1 ': b2 ': bs)
+        = (ContainNames as '[b1],  ContainNames as (b2 ': bs))
+
+type family Contains (a::[k]) (b::[k]) :: Constraint where
+    Contains as '[] = ()
+    Contains (a ': as) '[a] = ()
+    Contains (a ': as) '[b] = Contains as '[b]
+    Contains as (b1 ': b2 ': bs)
+        = (Contains as '[b1],  Contains as (b2 ': bs))
+
+{-
 type family NamesMinus (b :: [k]) (a :: [(k,*)]) :: [k] where
     NamesMinus xs '[] = xs
     NamesMinus ( a ': xs ) '[ '(a,b)] = xs
@@ -143,6 +158,7 @@ instance (ContainNames as '[b1], ContainNames as (b2 ': bs))
 class ContainNamesB (eq :: Bool) (a :: [(k,k2)]) (b :: [k])
 instance (ContainNames as '[b]) => ContainNamesB False ('(a,v) ': as) '[b]
 instance ContainNamesB True ('(a,v) ': as) '[a]
+-}
 
 type family ProjNames  (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     ProjNames xs '[] = '[]
