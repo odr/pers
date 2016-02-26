@@ -30,9 +30,6 @@ import qualified Data.HashMap.Strict as HM
 type (:::) (a :: k1) (b :: k2) = '(a,b)
 infixl 9 :::
 
--- getSymbol :: (KnownSymbol n) => Proxy (n:::v) -> String
--- getSymbol (_ :: Proxy (n:::v)) = symbolVal' (proxy# :: Proxy# n)
-
 -- | Kind for type of representation. Constructors are types.
 data R
     = Plain -- ^ Type to define simple record representation as tuple (a,).(b,).(c,)....(z,) $ ()
@@ -53,10 +50,6 @@ type family VRec (rep::R) (a :: [(k,*)]) :: * where
     VRec Plain '[] = ()
     VRec Plain '[ '(a,b)] = (b,())
     VRec Plain ('(a,b) ': xs) = (b, VRec Plain xs)
-
-class IsEmpty (a::[k])      where { isEmpty :: (Proxy# a) -> Bool }
-instance IsEmpty '[]        where { isEmpty _ = True }
-instance IsEmpty (x ': xs)  where { isEmpty _ = False }
 
 class (Rep rep b br, Rep rep a ar)
     => RecLens rep b a br ar    | rep b -> br
@@ -124,17 +117,6 @@ type family Contains (a::[k]) (b::[k]) :: Constraint where
     Contains as (b1 ': b2 ': bs)
         = (Contains as '[b1],  Contains as (b2 ': bs))
 
-{-
-class CProjNames  (a :: [(k,*)]) (b :: [k]) (c :: [(k,*)]) | a b -> c
-instance CProjNames xs '[] '[]
-instance CProjName xs c d => CProjNames xs '[c] '[d]
-instance (CProjName xs y z, CProjNames xs ys zs)
-        => CProjNames xs (y ': ys) (z ': zs)
-
-class CProjName  (a :: [(k,*)]) (b :: k) (c :: (k,*)) | a b -> c
-instance CProjName ( '(a,b) ': xs ) a '(a,b)
-instance CProjName xs c d => CProjName ( '(a,b) ': xs ) c d
--}
 type family MinusNames (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     MinusNames xs '[] = xs
     MinusNames ( '(a,b) ': xs ) '[a] = xs
@@ -169,45 +151,26 @@ recLens' (_:: Proxy '(rep,b,a))
     = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
 
 class (Rep rep a ar)
-    => Pairs (rep::R) (a::[(Symbol,*)]) ar | rep a -> ar
+    => ToPairs (rep::R) (a::[(Symbol,*)]) ar | rep a -> ar
   where
     toPairs     :: Proxy# rep -> Proxy a -> ar
                 -> [(T.Text, Value)] -> [(T.Text, Value)]
-    fromPairs   :: Proxy# rep -> Proxy a -> [(T.Text, Value)]
-                -> Either [SomeSymbol] ar
 
-instance Pairs Plain ('[]) () where
+instance ToPairs Plain ('[]) () where
     toPairs   _ _ _ = id
-    fromPairs _ _ _ = Right ()
 
 instance    ( KnownSymbol n
-            , Pairs Plain nvs vr
-            , Names (NRec nvs)
+            , ToPairs Plain nvs vr
             , ToJSON v
-            , FromJSON v
             )
-    => Pairs Plain ((n ::: v) ': nvs) (v,vr)
+    => ToPairs Plain ((n ::: v) ': nvs) (v,vr)
   where
     toPairs prb _ (v,vs) = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
                          . toPairs prb (Proxy :: Proxy nvs) vs
-    fromPairs prb (_ :: Proxy ((n ::: v) ': nvs)) fs
-        = case fs of
-            []      -> Left $ symbols (proxy# :: Proxy# (n ': NRec nvs))
-            (f:fs)  -> case fromPairs prb (Proxy :: Proxy nvs) fs of
-                Left ss -> either (Left . (:ss)) (\_ -> Left ss) $ rh f
-                Right r -> either (Left . (:[])) (\x -> Right (x,r)) $ rh f
-      where
-        rh (t,f) = case fromJSON f :: Result v of
-            Error _ -> Left $ SomeSymbol (Proxy :: Proxy n)
-            Success x -> Right x
-
-instance (Pairs rep a ar) => ToJSON (Proxy '(rep,a), ar) where
+instance (ToPairs rep a ar) => ToJSON (Proxy '(rep,a), ar) where
     toJSON (_,x)
         = object
         $ toPairs (proxy# :: Proxy# rep) (Proxy :: Proxy a) x []
-
--- instance (Pairs rep a ar) => FromJSON (Proxy '(rep,'[]), ()) where
---     parseJSON _ = mzero
 
 instance FromJSON (Proxy '(Plain,'[]), ()) where
     parseJSON (Object v)
@@ -216,9 +179,6 @@ instance FromJSON (Proxy '(Plain,'[]), ()) where
     parseJSON _     = mzero
 
 instance    ( KnownSymbol n
-            , Pairs Plain nvs vr
-            , Names (NRec nvs)
-            , ToJSON v
             , FromJSON v
             , FromJSON (Proxy '(Plain, nvs), vr)
             )
@@ -233,4 +193,3 @@ instance    ( KnownSymbol n
       where
         name = T.pack (symbolVal' (proxy# :: Proxy# n))
         hm' = HM.delete name hm
-
