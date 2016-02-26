@@ -45,8 +45,6 @@ class TableLike (a::k) where
     type TabName (a :: k)   :: Symbol
     type KeyDef (a :: k)    :: [Symbol]
     type RecordDef (a :: k) :: [(Symbol,*)]
-    -- type Key a              :: [(Symbol,*)]
-    -- type DataRecord a       :: [(Symbol,*)]
 
 type Key a              = ProjNames  (RecordDef a) (KeyDef a)
 type DataRecord a       = MinusNames (RecordDef a) (KeyDef a)

@@ -15,21 +15,12 @@
 module Pers.Types2
     where
 
--- import Data.Singletons.Prelude(Map, FstSym0, SndSym0)
--- import Data.Singletons.TypeRepStar()
 import GHC.TypeLits(Symbol, KnownSymbol, symbolVal', SomeSymbol(..))
 import GHC.Prim(Proxy#, proxy#)
 import Data.Proxy(Proxy(..))
 import Data.Type.Equality(type (==))
 import Lens.Micro(Lens', (^.), (.~), (&), lens)
 import GHC.Exts(Constraint)
--- import Control.Lens
-
--- import Pers.TH
-
--- using sMap and Map
--- :t sMap (singFun1 (Proxy::Proxy SndSym0) sSnd) (sing :: Sing '[ '("x",False), '("y",True) ])
--- :t Proxy :: Proxy (Map SndSym0 '[ '("x",False)])
 
 -- | Пара Описание и Тип-значение
 type (:::) (a :: k1) (b :: k2) = '(a,b)
@@ -131,35 +122,6 @@ type family Contains (a::[k]) (b::[k]) :: Constraint where
     Contains as (b1 ': b2 ': bs)
         = (Contains as '[b1],  Contains as (b2 ': bs))
 
-{-
-type family NamesMinus (b :: [k]) (a :: [(k,*)]) :: [k] where
-    NamesMinus xs '[] = xs
-    NamesMinus ( a ': xs ) '[ '(a,b)] = xs
-    NamesMinus ( a ': xs ) '[c] =  a ': NamesMinus xs '[c]
-    NamesMinus xs (y ': ys) = NamesMinus (NamesMinus xs '[y]) ys
-
-class Contains (a::[k]) (b::[k])
-instance Contains as '[]
-instance (ContainsB (a==b) (a ': as) '[b]) => Contains (a ': as) '[b]
-instance (Contains as '[b1], Contains as (b2 ': bs))
-            => Contains as (b1 ': b2 ': bs)
-
-class ContainsB (eq :: Bool) (a :: [k]) (b :: [k])
-instance (Contains as '[b]) => ContainsB False (a ': as) '[b]
-instance ContainsB True (a ': as) '[a]
-
-class ContainNames (a :: [(k,k2)]) (b :: [k])
-instance ContainNames as '[]
-instance (ContainNamesB (a==b) ('(a,v) ': as) '[b])
-            => ContainNames ('(a,v) ': as) '[b]
-instance (ContainNames as '[b1], ContainNames as (b2 ': bs))
-            => ContainNames as (b1 ': b2 ': bs)
-
-class ContainNamesB (eq :: Bool) (a :: [(k,k2)]) (b :: [k])
-instance (ContainNames as '[b]) => ContainNamesB False ('(a,v) ': as) '[b]
-instance ContainNamesB True ('(a,v) ': as) '[a]
--}
-
 type family ProjNames  (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     ProjNames xs '[] = '[]
     ProjNames xs '[c] = '[ProjName xs c]
@@ -187,23 +149,3 @@ recLens'    ::  ( Rep rep b br
 recLens' (_:: Proxy '(rep,b,a))
     = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
 
-{-
--- | Construct Named Record value by adding values
-class AddRec (rep::Rep) (a::[(k,*)]) (b::[(k,*)])
-class AddRec (rep::Rep) (a::[(k,*)]) (b::[(k,*)])
-  where
-    addRec :: Proxy# '(rep,a,b) -> VRec rep a -> VRec rep b -> VRec rep (a :++ b)
-
-instance AddRec rep '[] b where
-    addRec _ _ = id
-
-instance (Elem a c ~ False, AddRec Plain b c) => AddRec Plain (a ': b) c where
-    addRec _ (x,y) z = (x, addRec (proxy# :: Proxy# '(Plain,b,c)) y z)
--}
-
-
--- -- test:
--- type A1 = '["x":::Int,"y":::Char,"z":::String]
--- x = (2::Int,).('x',).("sss",) $ ()
--- f = recLens (proxy# :: Proxy# '(Plain, A1, '["z":::String, "x":::Int]))
---     (\(c,(n,_)) -> [(c++" new",(n+1,()))])
