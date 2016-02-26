@@ -102,12 +102,6 @@ type family NRec (a :: [(k1,k2)]) :: [k1] where
 pNRec :: Proxy a -> Proxy (NRec a)
 pNRec (_::Proxy a) = Proxy :: Proxy (NRec a)
 
-type family MinusNames (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
-    MinusNames xs '[] = xs
-    MinusNames ( '(a,b) ': xs ) '[a] = xs
-    MinusNames ( '(a,b) ': xs ) '[c] = '(a,b) ': MinusNames xs '[c]
-    MinusNames xs (y ': ys) = MinusNames (MinusNames xs '[y]) ys
-
 type family ContainNames (a :: [(k,k2)]) (b :: [k]) :: Constraint where
     ContainNames as '[] = ()
     ContainNames ('(a,v) ': as) '[a] = ()
@@ -121,6 +115,23 @@ type family Contains (a::[k]) (b::[k]) :: Constraint where
     Contains (a ': as) '[b] = Contains as '[b]
     Contains as (b1 ': b2 ': bs)
         = (Contains as '[b1],  Contains as (b2 ': bs))
+
+{-
+class CProjNames  (a :: [(k,*)]) (b :: [k]) (c :: [(k,*)]) | a b -> c
+instance CProjNames xs '[] '[]
+instance CProjName xs c d => CProjNames xs '[c] '[d]
+instance (CProjName xs y z, CProjNames xs ys zs)
+        => CProjNames xs (y ': ys) (z ': zs)
+
+class CProjName  (a :: [(k,*)]) (b :: k) (c :: (k,*)) | a b -> c
+instance CProjName ( '(a,b) ': xs ) a '(a,b)
+instance CProjName xs c d => CProjName ( '(a,b) ': xs ) c d
+-}
+type family MinusNames (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
+    MinusNames xs '[] = xs
+    MinusNames ( '(a,b) ': xs ) '[a] = xs
+    MinusNames ( '(a,b) ': xs ) '[c] = '(a,b) ': MinusNames xs '[c]
+    MinusNames xs (y ': ys) = MinusNames (MinusNames xs '[y]) ys
 
 type family ProjNames  (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     ProjNames xs '[] = '[]
