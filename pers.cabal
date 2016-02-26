@@ -15,11 +15,14 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:      Pers.Types
-                        , Pers.TH
-                        , Pers.Database.DDL
-                        , Pers.Database.DML
-                        , Pers.Database.Sqlite.Sqlite
+  exposed-modules:      Pers.Types2
+                        -- , Pers.TH
+                        -- , Pers.Database.DDL
+                        -- , Pers.Database.DML
+                        -- , Pers.Database.Sqlite.Sqlite
+                        , Pers.Database.DDL2
+                        , Pers.Database.DML2
+                        , Pers.Database.Sqlite.Sqlite2
   build-depends:       base >= 4.8 && < 5
                         , ghc-prim >= 0.4
                         , data-default
@@ -31,7 +34,25 @@ library
                         , direct-sqlite
                         , transformers
                         , exceptions
-                        , singletons
+                        -- , singletons
+                        --
+                        , servant
+                        , servant-server
+                        -- , transformers
+                        , mtl
+                        , either
+                        , aeson
+                        , attoparsec
+                        , string-conversions
+                        , time
+                        , http-media
+                        , wai
+                        , warp
+                        , directory
+                        , blaze-markup
+                        , blaze-html
+                        , lucid
+                        , servant-lucid
   default-language:    Haskell2010
 
 executable pers-exe
@@ -47,6 +68,8 @@ executable pers-exe
                         , text
                         , transformers
                         , exceptions
+                        , servant
+                        , servant-server
   default-language:    Haskell2010
 
 test-suite pers-test

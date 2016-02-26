@@ -8,7 +8,7 @@ packages:
 - '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
-extra-deps: []
+extra-deps: [servant-lucid-0.4.4.6]
 # basic-lens-0.0.0
 #            , conversion-1.2
 #            , conversion-text-1.0.0.2

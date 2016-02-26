@@ -20,44 +20,12 @@ import Control.Monad.IO.Class(MonadIO(..))
 import qualified Data.Text as T
 import Control.Monad.Catch
 
-import Pers.Types((:::),Rep(Plain),VRec,recLens,pNRec)
-import Pers.Database.DDL(TableDef, runSession, DDL(..))
-import Pers.Database.DML(DML(..),Cond(..),InsAutoPK(..),sel)
-import Pers.Database.Sqlite.Sqlite(sqlite)
+import Pers.Types2 -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
+import Pers.Database.DDL2 -- (TableDef, runSession, DDL(..))
+import Pers.Database.DML2 -- (DML(..),Cond(..),InsAutoPK(..),sel)
+import Pers.Database.Sqlite.Sqlite2(sqlite)
 
-type Rec1 = '["id":::Int64,"name":::T.Text,"val":::Maybe Double
-             ,"x":::Int64, "z":::T.Text, "y"::: Maybe T.Text
-             ,"_1":::Int64,"_2":::Int64,"_3":::Int64
-             -- ,"4":::Int64,"5":::Int64,"6":::Int64
-             -- ,"7":::Int64,"8":::Int64,"9":::Int64
-             -- ,"10":::Int64,"11":::Int64,"12":::Int64
-             {-  -}
-             ]
-type Tab1 = TableDef "tab1" Rec1 '["id"]
-
-type PTab1Sel a = Proxy '(Plain, Tab1, a)
-pRec1 = Proxy :: Proxy Rec1
-pTab1 = Proxy :: Proxy '(Plain,Tab1)
-pTab1' = Proxy :: Proxy Tab1
-
-r0 = (1,).(2,).(3,) -- .(4,).(5,).(6,).(7,).(8,).(9,).(10,).(11,).(12,)
-rec1 = (1,).("text1",).(Nothing,) .(4,).("ZZZ",).(Nothing,).r0 {-  -} $ ()
-rec2 = (2,).("text2",).(Just 2.2,).(6,).("xxx",).(Nothing,).r0 {-  -} $ ()
-
-type IdName = '["id":::Int64,"name":::T.Text]
-
-lensIdName :: Lens' (VRec Plain Rec1) (VRec Plain IdName)
-lensIdName = recLens (proxy# :: Proxy# '(Plain,Rec1,IdName))
-
--- type Name2 = '["name":::T.Text]
--- lensName2 :: Lens' (VRec Plain Rec1) (VRec Plain IdName)
--- lensName2 = recLens (proxy# :: Proxy# '(Plain,Rec1,IdName))
-
-lensId = recLens (proxy# :: Proxy# '(Plain,Rec1,'["id":::Int64]))
-pId = Proxy :: Proxy '["id":::Int64]
-pVal = Proxy :: Proxy '["val":::Maybe Double]
-pVal' = pNRec pVal
-pIdName = Proxy :: Proxy '["id":::Int64,"name":::T.Text]
+import Tab1
 
 sql :: IO ()
 sql = do
@@ -66,8 +34,8 @@ sql = do
             createTable pTab1'
 
             step1
-            --step2
-            --step3
+            step2
+            step3
         )
   where
     step1 = do
@@ -78,37 +46,43 @@ sql = do
                   , rec2 & lensIdName .~ ((5,).("text4",) $ ())
                   ]
         insAuto pTab1 [("text auto 1",).(Just 1.1,).(7,).("auto",).(Just "note",).r0 {-  -} $ ()]
+        -- {-
         del pTab1 (Equal pId (1,()))
             >>= liftIO . print
         del pTab1 (Equal pId (1,()))
             >>= liftIO . print
         ins pTab1 [rec1]
         upd pTab1   [ rec1
-                    & (recLens (proxy# :: Proxy# '(Plain,Rec1,'["name":::T.Text,"_2":::Int64])))
+                    & (recLens' (Proxy :: Proxy '(Plain,Rec1,'["name","_2"])))
                     .~ (("updated!",).(100500,) $ ())
                     ]
+        -- -}
         insAuto pTab1 [("text auto 2",).(Just 2.1,).(10,).("test",).(Just "note2",).r0 {- -} $ ()]
             >>= liftIO . print
         sel pTab1 CondTrue >>= liftIO . mapM_ print
         return ()
-    {-
+    -- {-
     step2 = do
         sel pTab1 (Equal pIdName (rec1 ^. lensIdName)) >>= liftIO . mapM_ print
-        sel pTab1 (Equal pRec1 rec2) >>= liftIO . mapM_ print
+        sel pTab1 (Equal (pNRec pRec1) rec2) >>= liftIO . mapM_ print
         del pTab1 $ Equal pId (2,())
         sel pTab1 (Great pVal (Just 2,())) >>= liftIO . mapM_ print
         sel pTab1 (And [ Great pVal (Just 2,())
                        , Least pId  (7,())
                        ])
             >>= liftIO . mapM_ print
+    -- -}
+    -- {-
     step3 = do
-        sel pTab1 (Null pVal') >>= liftIO . mapM_ print
-        sel pTab1 (NotNull pVal') >>= liftIO . mapM_ print
-        selProj (Proxy :: PTab1Sel '["id","val","z" {-  -} ]) (Not $ NotNull pVal')
+        sel pTab1 (Null pVal) >>= liftIO . mapM_ print
+        sel pTab1 (NotNull pVal) >>= liftIO . mapM_ print
+        sel pTab1 (Not $ NotNull pVal) >>= liftIO . mapM_ print
+        selProj (Proxy :: PTab1Sel '["id","val","z" ]) (Not $ NotNull pVal)
             >>= liftIO . mapM_ print
-        sel pTab1 (Not $ NotNull pVal')
+        sel pTab1 (Not $ NotNull pVal)
             >>= liftIO . mapM_ print
-    -}
+        return ()
+    -- -}
 
 
 -- TODO обработка ошибок
