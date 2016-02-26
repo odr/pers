@@ -45,8 +45,6 @@ class TableLike (a::k) where
     type TabName (a :: k)   :: Symbol
     type KeyDef (a :: k)    :: [Symbol]
     type RecordDef (a :: k) :: [(Symbol,*)]
-    -- type Key a              :: [(Symbol,*)]
-    -- type DataRecord a       :: [(Symbol,*)]
 
 type Key a              = ProjNames  (RecordDef a) (KeyDef a)
 type DataRecord a       = MinusNames (RecordDef a) (KeyDef a)
@@ -63,7 +61,7 @@ class DBOption back where
     type Conn back
     type FieldDB back
     type SessionParams back
-    paramName :: Proxy# back -> Int -> Text -- | How to create param name (like "?1") from order
+    paramName :: Proxy# back -> Int -> Text -- ^ How to create param name (like "?1") from order
     runSession :: (MonadIO m, MonadMask m)
             => Proxy back -> SessionParams back -> SessionMonad back m a -> m a
 
@@ -97,21 +95,8 @@ class RowDDL backend (a :: [(Symbol,*)]) where
     rowCreate   :: Proxy# backend -> Proxy a
                 -> [Text] -> [Text]
 
-class RowRepDDL (rep::Rep) back (a::[(Symbol,*)]) where
-    toRowDb     :: Proxy# '(rep,back) -> Proxy a -> VRec rep a
-                -> [FieldDB back] -> [FieldDB back]
-    fromRowDb   :: Proxy# '(rep,back) -> Proxy a -> [FieldDB back]
-                -> Either [SomeSymbol] (VRec rep a)
-
--- magic :: (Proxy a -> b) -> Proxy# a -> b
--- magic f _ = f (Proxy :: Proxy a)
-
 instance RowDDL b ('[]) where
     rowCreate _ _   = id
-
-instance RowRepDDL Plain b ('[]) where
-    toRowDb   _ _ _ = id
-    fromRowDb _ _ _ = Right ()
 
 instance (FieldDDL b v, KnownSymbol n, RowDDL b nvs, Names (NRec nvs))
     => RowDDL b ((n ::: v) ': nvs)
@@ -125,8 +110,24 @@ instance (FieldDDL b v, KnownSymbol n, RowDDL b nvs, Names (NRec nvs))
       where
         ns = nullStr pb (proxy# :: Proxy# v)
 
-instance (FieldDDL b v, KnownSymbol n, RowRepDDL Plain b nvs, Names (NRec nvs))
-    => RowRepDDL Plain b ((n ::: v) ': nvs)
+class (Rep rep a ar)
+    => RowRepDDL (rep::R) back (a::[(Symbol,*)]) ar | rep a -> ar
+  where
+    toRowDb     :: Proxy# '(rep,back) -> Proxy a -> ar
+                -> [FieldDB back] -> [FieldDB back]
+    fromRowDb   :: Proxy# '(rep,back) -> Proxy a -> [FieldDB back]
+                -> Either [SomeSymbol] ar
+
+instance RowRepDDL Plain b ('[]) () where
+    toRowDb   _ _ _ = id
+    fromRowDb _ _ _ = Right ()
+
+instance    ( FieldDDL b v
+            , KnownSymbol n
+            , RowRepDDL Plain b nvs vr
+            , Names (NRec nvs)
+            )
+    => RowRepDDL Plain b ((n ::: v) ': nvs) (v,vr)
   where
     toRowDb prb _ (v,vs) = (toDb (proxy# :: Proxy# b) v :)
                          . toRowDb prb (Proxy :: Proxy nvs) vs
@@ -140,8 +141,8 @@ instance (FieldDDL b v, KnownSymbol n, RowRepDDL Plain b nvs, Names (NRec nvs))
         rh f = maybe (Left $ SomeSymbol (Proxy :: Proxy n)) Right
                 (fromDb (proxy# :: Proxy# b) f :: Maybe v)
 
-rowDb :: RowRepDDL rep backend a => Proxy# '(rep, backend) -> Proxy a
-        -> VRec rep a -> [FieldDB backend]
+rowDb :: (RowRepDDL rep backend a ar)
+        => Proxy# '(rep, backend) -> Proxy a -> ar -> [FieldDB backend]
 rowDb prb pa v = toRowDb prb pa v []
 
 lensPk (_::Proxy '(rep,a))
@@ -149,17 +150,20 @@ lensPk (_::Proxy '(rep,a))
 lensData (_::Proxy '(rep,a))
     = recLens (proxy#::Proxy#  '( rep, RecordDef a, DataRecord a ))
 
-recDbPk :: (RecLens rep (RecordDef a) (Key a), RowRepDDL rep back (Key a))
-    => Proxy '(rep, back, a) -> VRec rep (RecordDef a) -> [FieldDB back]
-recDbPk (_::Proxy '(rep,back,a)) rec -- :: VRec rep (RecordDef a))
+recDbPk ::  ( RecLens rep (RecordDef a) (Key a) s ar
+            , RowRepDDL rep back (Key a) ar
+            )
+    => Proxy '(rep, back, a) -> s -> [FieldDB back]
+recDbPk (_::Proxy '(rep,back,a)) rec
     = rowDb (proxy# :: Proxy# '(rep,back))
             (Proxy :: Proxy (Key a))
             (rec ^. lensPk (Proxy :: Proxy '(rep,a)))
 
-recDbData :: (RecLens rep (RecordDef a) (DataRecord a)
-            , RowRepDDL rep back (DataRecord a))
-    => Proxy '(rep, back, a) -> VRec rep (RecordDef a) -> [FieldDB back]
-recDbData (_::Proxy '(rep,back,a)) rec -- :: VRec rep (RecordDef a))
+recDbData   ::  ( RecLens rep (RecordDef a) (DataRecord a) s ar
+                , RowRepDDL rep back (DataRecord a) ar
+                )
+    => Proxy '(rep, back, a) -> s -> [FieldDB back]
+recDbData (_::Proxy '(rep,back,a)) rec
     = rowDb (proxy# :: Proxy# '(rep,back))
             (Proxy :: Proxy (DataRecord a))
             (rec ^. lensData (Proxy :: Proxy '(rep,a)))

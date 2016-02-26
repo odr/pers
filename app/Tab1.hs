@@ -15,8 +15,8 @@ import Data.Int(Int64)
 import qualified Data.Text as T
 import Lens.Micro(Lens') -- (&), (.~), (^.))
 
-import Pers.Types2 -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
-import Pers.Database.DDL2 -- (TableDef, runSession, DDL(..))
+import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
+import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
 
 type Rec1 = '["id":::Int64,"name":::T.Text,"val":::Maybe Double
              ,"x":::Int64, "z":::T.Text, "y"::: Maybe T.Text

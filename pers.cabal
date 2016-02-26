@@ -15,14 +15,10 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:      Pers.Types2
-                        -- , Pers.TH
-                        -- , Pers.Database.DDL
-                        -- , Pers.Database.DML
-                        -- , Pers.Database.Sqlite.Sqlite
-                        , Pers.Database.DDL2
-                        , Pers.Database.DML2
-                        , Pers.Database.Sqlite.Sqlite2
+  exposed-modules:      Pers.Types
+                        , Pers.Database.DDL
+                        , Pers.Database.DML
+                        , Pers.Database.Sqlite.Sqlite
   build-depends:       base >= 4.8 && < 5
                         , ghc-prim >= 0.4
                         , data-default
@@ -53,6 +49,7 @@ library
                         , blaze-html
                         , lucid
                         , servant-lucid
+                        , unordered-containers
   default-language:    Haskell2010
 
 executable pers-exe

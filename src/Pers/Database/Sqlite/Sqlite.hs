@@ -10,6 +10,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module Pers.Database.Sqlite.Sqlite where
 
 import Prelude as P
@@ -29,9 +31,9 @@ import Control.Monad.Trans.RWS(RWS(..))
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.List(intercalate)
 import Lens.Micro((^.))
-import Data.Promotion.Prelude.List((:\\))
+-- import Data.Promotion.Prelude.List((:\\))
 
-import Pers.TH
+-- import Pers.TH
 import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
@@ -84,7 +86,7 @@ instance FieldDDL Sqlite ByteString where
     fromDb _ _              = Nothing
 
 instance (RowDDL Sqlite a, KnownSymbol n, Names pk)
-    => DDL Sqlite (TableDef n a pk) -- ("table":::("name":::n,"rec":::a,"pk":::pk))
+    => DDL Sqlite (TableDef n a pk)
   where
     createTable (Proxy :: Proxy (TableDef n a pk))
         = runSqliteDDL
@@ -108,18 +110,19 @@ instance AutoGenPK Sqlite (Int64,()) where
 instance    ( Names (NRec a)
             , KnownSymbol n
             , Single rep
-            , (ProjNames a pk :\\ a) ~ '[]
-            , RecLens rep a (ProjNames a pk)
-            , RecLens rep a (MinusNames a pk)
+            , ContainNames a pk
+            , RecLens rep a (ProjNames a pk) ar kr
+            , RecLens rep a (MinusNames a pk) ar dr
             , Names (NRec (MinusNames a pk))
-            , Names (NRec (ProjNames a pk))
-            , RowRepDDL rep Sqlite a
-            , RowRepDDL rep Sqlite (ProjNames a pk)
-            , RowRepDDL rep Sqlite (MinusNames a pk)
+            , Names pk
+            , RowRepDDL rep Sqlite a ar
+            , RowRepDDL rep Sqlite (ProjNames a pk) kr
+            , RowRepDDL rep Sqlite (MinusNames a pk) dr
             )
-    => DML rep Sqlite (TableDef n a pk)
+    => DML rep Sqlite (TableDef n a pk) ar kr
   where
-    ins (_::Proxy '(rep, TableDef n a pk)) rs
+    ins (_::Proxy '(rep, TableDef n a pk))
+            (rs :: [ar])
         = do
             (_,conn) <- ask
             liftIO $ P.print (cmd, pss)
@@ -129,7 +132,7 @@ instance    ( Names (NRec a)
       where
         (cmd, pss) = insRecCmdPars (Proxy :: Proxy '(rep,Sqlite,n,a)) rs
 
-    upd (p1::Proxy '(rep, TableDef n a pk)) rs
+    upd (p1::Proxy '(rep, TableDef n a pk)) (rs :: [ar])
         = do
             (_,conn) <- ask
             liftIO $ P.print (cmd, pss)
@@ -187,10 +190,13 @@ instance    ( Names (NRec a)
                     ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
                 Right a -> a
 
-instance (KnownSymbol t, Names (NRec (MinusNames a pk))
-        , AutoGenPK Sqlite (VRec rep (ProjNames a pk))
-        , RowRepDDL rep Sqlite (MinusNames a pk))
-    => InsAutoPK rep Sqlite (TableDef t a pk)
+instance    ( KnownSymbol t
+            , Names (NRec (MinusNames a pk))
+            , AutoGenPK Sqlite kr
+            , RowRepDDL rep Sqlite (MinusNames a pk) dr
+            , Rep rep (ProjNames a pk) kr
+            )
+    => InsAutoPK rep Sqlite (TableDef t a pk) kr dr
   where
     insAuto (_::Proxy '(rep, TableDef t a pk)) rs = do
         (_,conn) <- ask

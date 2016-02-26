@@ -20,10 +20,10 @@ import Control.Monad.IO.Class(MonadIO(..))
 import qualified Data.Text as T
 import Control.Monad.Catch
 
-import Pers.Types2 -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
-import Pers.Database.DDL2 -- (TableDef, runSession, DDL(..))
-import Pers.Database.DML2 -- (DML(..),Cond(..),InsAutoPK(..),sel)
-import Pers.Database.Sqlite.Sqlite2(sqlite)
+import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
+import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
+import Pers.Database.DML -- (DML(..),Cond(..),InsAutoPK(..),sel)
+import Pers.Database.Sqlite.Sqlite(sqlite)
 
 import Tab1
 

@@ -11,78 +11,136 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module Pers.Types
     where
 
-import Data.Singletons.Prelude(Map, FstSym0, SndSym0)
--- import Data.Singletons.TypeRepStar()
 import GHC.TypeLits(Symbol, KnownSymbol, symbolVal', SomeSymbol(..))
 import GHC.Prim(Proxy#, proxy#)
 import Data.Proxy(Proxy(..))
 import Data.Type.Equality(type (==))
 import Lens.Micro(Lens', (^.), (.~), (&), lens)
--- import Control.Lens
-
-import Pers.TH
-
--- using sMap and Map
--- :t sMap (singFun1 (Proxy::Proxy SndSym0) sSnd) (sing :: Sing '[ '("x",False), '("y",True) ])
--- :t Proxy :: Proxy (Map SndSym0 '[ '("x",False)])
-
+import GHC.Exts(Constraint)
+import qualified Data.Text as T
+import Data.Aeson(ToJSON(..),FromJSON(..),Value(..)
+                ,fromJSON, Result(..), object, (.:))
+import Control.Monad(mzero)
+import qualified Data.HashMap.Strict as HM
 -- | Пара Описание и Тип-значение
 type (:::) (a :: k1) (b :: k2) = '(a,b)
 infixl 9 :::
 
-getSymbol :: (KnownSymbol n) => Proxy (n:::v) -> String
-getSymbol (_ :: Proxy (n:::v)) = symbolVal' (proxy# :: Proxy# n)
+-- getSymbol :: (KnownSymbol n) => Proxy (n:::v) -> String
+-- getSymbol (_ :: Proxy (n:::v)) = symbolVal' (proxy# :: Proxy# n)
 
 -- | Kind for type of representation. Constructors are types.
-data Rep = Plain
+data R
+    = Plain -- ^ Type to define simple record representation as tuple (a,).(b,).(c,)....(z,) $ ()
 
--- | Type to define simple record representation as tuple (a,).(b,).(c,)....(z,) $ ()
--- type family Plain :: Rep
-
-type family ToRep (rep::Rep) (a :: [*]) :: * where
-    ToRep Plain '[] = ()
-    ToRep Plain (x ': xs) = (x, ToRep Plain xs)
-
-class Single (rep::Rep) where
-    single :: Proxy# rep -> a -> VRec rep '["_":::a]
+-- | Representation of singleton
+class Single (rep::R) where
+    type Singl rep a
+    single :: Proxy# rep -> a -> Singl rep a
 instance Single Plain where
+    type Singl Plain a = (a,())
     single _ = (,())
+
+class Rep (rep::R) (a :: [(k,*)]) (b :: *) | rep a -> b
+instance Rep Plain '[] ()
+instance (Rep Plain xs c) => Rep Plain ('(a,b) ': xs) (b, c)
+
+type family VRec (rep::R) (a :: [(k,*)]) :: * where
+    VRec Plain '[] = ()
+    VRec Plain '[ '(a,b)] = (b,())
+    VRec Plain ('(a,b) ': xs) = (b, VRec Plain xs)
+
+class IsEmpty (a::[k])      where { isEmpty :: (Proxy# a) -> Bool }
+instance IsEmpty '[]        where { isEmpty _ = True }
+instance IsEmpty (x ': xs)  where { isEmpty _ = False }
+
+class (Rep rep b br, Rep rep a ar)
+    => RecLens rep b a br ar    | rep b -> br
+                                , rep a -> ar
+  where
+    recLens :: Proxy# '(rep,b,a) -> Lens' br ar
+
+instance    ( RecLensB (a==b) rep (b ': bs) '[a] br ar
+            )
+            => RecLens rep (b ': bs) (a ': '[]) br ar
+  where
+    recLens p = recLensB p (proxy# :: Proxy# (a == b))
+
+instance    ( RecLens Plain bs '[a1] xs (y1,())
+            , RecLens Plain bs (a2 ': as) xs (y2,ys)
+            , Rep Plain (a1 ': a2 ': as) (y1,(y2,ys))
+            )
+            => RecLens Plain bs (a1 ': a2 ': as) xs (y1,(y2,ys))
+  where
+    recLens _ = lens get set
+      where
+        get = (\(a,_) b -> (a, b))
+            <$> (^. recLens (proxy# :: Proxy# '(Plain,bs,'[a1])))
+            <*> (^. recLens (proxy# :: Proxy# '(Plain,bs,(a2 ': as))))
+        set = (\x (v1,v2) -> x
+                & recLens (proxy# :: Proxy# '(Plain,bs,'[a1])) .~ (v1,())
+                & recLens (proxy# :: Proxy# '(Plain,bs,(a2 ': as))) .~ v2
+            )
+class (Rep rep b br, Rep rep a ar)
+    => RecLensB (eq::Bool) rep b a br ar
+                | rep b -> br, rep a -> ar
+  where
+    recLensB :: Proxy# '(rep,b,a) -> Proxy# eq -> Lens' br ar
+
+instance (Rep Plain (a ': as) (x,xs), Rep Plain '[a] (x,()))
+    => RecLensB True Plain (a ': as) '[a] (x,xs) (x,())
+  where
+    recLensB _ _ f (x,y) = fmap ((,y).fst) $ f (x,())
+
+instance (Rep Plain (b ': bs) (x,xs), RecLens Plain bs '[a] xs (y,()))
+    => RecLensB False Plain (b ': bs) '[a] (x,xs) (y,())
+  where
+    recLensB _ _ f (x,y)
+        = fmap (x,)
+        $ recLens (proxy# :: Proxy# '(Plain,bs,'[a])) f y
 
 type family NRec (a :: [(k1,k2)]) :: [k1] where
     NRec '[] = '[]
     NRec ('(a,b) ': xs) = a ': NRec xs
--- type NRec (a :: [(k,*)]) = Map FstSym0 a
-type VRec (rep::Rep) (a :: [(k,*)]) = ToRep rep (Map SndSym0 a)
-{-
-type family VRec' (rep::Rep) (a :: [(k,*)]) :: * where
-    VRec' Plain '[] = ()
-    VRec' Plain '[ '(a,b)] = (b,())
-    VRec' Plain ('(a,b) ': xs) = (b, VRec' Plain xs)
--}
 
 pNRec :: Proxy a -> Proxy (NRec a)
 pNRec (_::Proxy a) = Proxy :: Proxy (NRec a)
 
+type family ContainNames (a :: [(k,k2)]) (b :: [k]) :: Constraint where
+    ContainNames as '[] = ()
+    ContainNames ('(a,v) ': as) '[a] = ()
+    ContainNames ('(a,v) ': as) '[b] = ContainNames as '[b]
+    ContainNames as (b1 ': b2 ': bs)
+        = (ContainNames as '[b1],  ContainNames as (b2 ': bs))
 
--- type MinusNames (a :: [(k,*)]) (b :: [k])
---     = (MinusBy EqFstSym0 a b)
+type family Contains (a::[k]) (b::[k]) :: Constraint where
+    Contains as '[] = ()
+    Contains (a ': as) '[a] = ()
+    Contains (a ': as) '[b] = Contains as '[b]
+    Contains as (b1 ': b2 ': bs)
+        = (Contains as '[b1],  Contains as (b2 ': bs))
+
+{-
+class CProjNames  (a :: [(k,*)]) (b :: [k]) (c :: [(k,*)]) | a b -> c
+instance CProjNames xs '[] '[]
+instance CProjName xs c d => CProjNames xs '[c] '[d]
+instance (CProjName xs y z, CProjNames xs ys zs)
+        => CProjNames xs (y ': ys) (z ': zs)
+
+class CProjName  (a :: [(k,*)]) (b :: k) (c :: (k,*)) | a b -> c
+instance CProjName ( '(a,b) ': xs ) a '(a,b)
+instance CProjName xs c d => CProjName ( '(a,b) ': xs ) c d
+-}
 type family MinusNames (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     MinusNames xs '[] = xs
     MinusNames ( '(a,b) ': xs ) '[a] = xs
     MinusNames ( '(a,b) ': xs ) '[c] = '(a,b) ': MinusNames xs '[c]
     MinusNames xs (y ': ys) = MinusNames (MinusNames xs '[y]) ys
 
-type family NamesMinus (b :: [k]) (a :: [(k,*)]) :: [k] where
-    NamesMinus xs '[] = xs
-    NamesMinus ( a ': xs ) '[ '(a,b)] = xs
-    NamesMinus ( a ': xs ) '[c] =  a ': NamesMinus xs '[c]
-    NamesMinus xs (y ': ys) = NamesMinus (NamesMinus xs '[y]) ys
-
--- type ProjNames  (a :: [(k,*)]) (b :: [k])
---     = (ProjBy EqFstSym0 a b)
 type family ProjNames  (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     ProjNames xs '[] = '[]
     ProjNames xs '[c] = '[ProjName xs c]
@@ -102,60 +160,77 @@ instance (KnownSymbol s, Names ss) => Names (s ': ss) where
     symbols _ = SomeSymbol (Proxy :: Proxy s) : symbols (proxy# :: Proxy# ss)
     names _ = symbolVal' (proxy# :: Proxy# s) : names (proxy# :: Proxy# ss)
 
--- | Lens
-class RecLens (rep::Rep) (b::[(k,*)]) (a::[(k,*)]) where
-    recLens :: Proxy# '(rep,b,a) -> Lens' (VRec rep b) (VRec rep a)
-
-class RecLensB (rep::Rep) (b::[(k,*)]) (a::[(k,*)]) (isEq :: Bool) where
-    recLensB :: Proxy# '(rep,b,a) -> Proxy# (isEq::Bool)
-                -> Lens' (VRec rep b) (VRec rep a)
-
-instance (RecLensB rep (b ': bs) '[a] (a==b)) => RecLens rep (b ': bs) (a ': '[])
-  where
-    recLens p = recLensB p (proxy# :: Proxy# (a == b))
-
-instance RecLensB Plain (a ': bs) '[a] True where
-    recLensB _ _ f (x,y) = fmap ((,y).fst) $ f (x,())
-
-instance (RecLens Plain bs '[a]) => RecLensB Plain (b ': bs) '[a] False where
-    recLensB _ _ f (x,y) = fmap (x,)
-                         $ recLens (proxy# :: Proxy# '(Plain,bs,'[a])) f y
-
-instance ( RecLens Plain cs '[a], RecLens Plain cs (a1 ': as)
-         ) => RecLens Plain cs (a ': a1 ': as)
-  where
-    recLens _ = lens get set
-      where
-        get = (\(a,_) b -> (a, b))
-            <$> (^. recLens (proxy# :: Proxy# '(Plain,cs,'[a])))
-            <*> (^. recLens (proxy# :: Proxy# '(Plain,cs,(a1 ': as))))
-        set = (\x (v1,v2) -> x
-                & recLens (proxy# :: Proxy# '(Plain,cs,'[a])) .~ (v1,())
-                & recLens (proxy# :: Proxy# '(Plain,cs,(a1 ': as))) .~ v2
+recLens'    ::  ( Rep rep b br
+            , Rep rep (ProjNames b a) ar
+            , RecLens rep b (ProjNames b a) br ar
             )
-
-recLens' :: RecLens rep b (ProjNames b a)
-        => Proxy '(rep,b,a) -> Lens' (VRec rep b) (VRec rep (ProjNames b a))
+    => Proxy '(rep,b,a) -> Lens' br ar
 recLens' (_:: Proxy '(rep,b,a))
     = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
 
-{-
--- | Construct Named Record value by adding values
-class AddRec (rep::Rep) (a::[(k,*)]) (b::[(k,*)])
-class AddRec (rep::Rep) (a::[(k,*)]) (b::[(k,*)])
+class (Rep rep a ar)
+    => Pairs (rep::R) (a::[(Symbol,*)]) ar | rep a -> ar
   where
-    addRec :: Proxy# '(rep,a,b) -> VRec rep a -> VRec rep b -> VRec rep (a :++ b)
+    toPairs     :: Proxy# rep -> Proxy a -> ar
+                -> [(T.Text, Value)] -> [(T.Text, Value)]
+    fromPairs   :: Proxy# rep -> Proxy a -> [(T.Text, Value)]
+                -> Either [SomeSymbol] ar
 
-instance AddRec rep '[] b where
-    addRec _ _ = id
+instance Pairs Plain ('[]) () where
+    toPairs   _ _ _ = id
+    fromPairs _ _ _ = Right ()
 
-instance (Elem a c ~ False, AddRec Plain b c) => AddRec Plain (a ': b) c where
-    addRec _ (x,y) z = (x, addRec (proxy# :: Proxy# '(Plain,b,c)) y z)
--}
+instance    ( KnownSymbol n
+            , Pairs Plain nvs vr
+            , Names (NRec nvs)
+            , ToJSON v
+            , FromJSON v
+            )
+    => Pairs Plain ((n ::: v) ': nvs) (v,vr)
+  where
+    toPairs prb _ (v,vs) = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
+                         . toPairs prb (Proxy :: Proxy nvs) vs
+    fromPairs prb (_ :: Proxy ((n ::: v) ': nvs)) fs
+        = case fs of
+            []      -> Left $ symbols (proxy# :: Proxy# (n ': NRec nvs))
+            (f:fs)  -> case fromPairs prb (Proxy :: Proxy nvs) fs of
+                Left ss -> either (Left . (:ss)) (\_ -> Left ss) $ rh f
+                Right r -> either (Left . (:[])) (\x -> Right (x,r)) $ rh f
+      where
+        rh (t,f) = case fromJSON f :: Result v of
+            Error _ -> Left $ SomeSymbol (Proxy :: Proxy n)
+            Success x -> Right x
 
+instance (Pairs rep a ar) => ToJSON (Proxy '(rep,a), ar) where
+    toJSON (_,x)
+        = object
+        $ toPairs (proxy# :: Proxy# rep) (Proxy :: Proxy a) x []
 
--- -- test:
--- type A1 = '["x":::Int,"y":::Char,"z":::String]
--- x = (2::Int,).('x',).("sss",) $ ()
--- f = recLens (proxy# :: Proxy# '(Plain, A1, '["z":::String, "x":::Int]))
---     (\(c,(n,_)) -> [(c++" new",(n+1,()))])
+-- instance (Pairs rep a ar) => FromJSON (Proxy '(rep,'[]), ()) where
+--     parseJSON _ = mzero
+
+instance FromJSON (Proxy '(Plain,'[]), ()) where
+    parseJSON (Object v)
+        | HM.null v = return (Proxy :: Proxy '(Plain,'[]), ())
+        | otherwise = mzero
+    parseJSON _     = mzero
+
+instance    ( KnownSymbol n
+            , Pairs Plain nvs vr
+            , Names (NRec nvs)
+            , ToJSON v
+            , FromJSON v
+            , FromJSON (Proxy '(Plain, nvs), vr)
+            )
+    => FromJSON (Proxy '(Plain, ((n ::: v) ': nvs)), (v,vr))
+  where
+    parseJSON (Object hm) = do
+        (_ :: Proxy '(Plain, nvs), rest::vr) <- parseJSON (Object hm')
+
+        fmap ( (Proxy :: Proxy '(Plain, ((n ::: v) ': nvs)),)
+             . (,rest)
+             ) $ hm .: name
+      where
+        name = T.pack (symbolVal' (proxy# :: Proxy# n))
+        hm' = HM.delete name hm
+

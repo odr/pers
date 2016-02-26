@@ -18,7 +18,7 @@ import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
 
--- | type to default class instances
+-- | Type to default class instances
 data ServantDefault
 
 class PersServant opt back (x::k) where
@@ -39,5 +39,5 @@ instance (DBOption back, DML Plain back (TableDef n rec pk))
         = n :> "list" :> Get '[JSON,HTML] [VRec Plain rec]
     type PersMonad ServantDefault back (TableDef n rec pk)
         = SessionMonad back IO
-    persServer _ _ = undefined
+    persServer _ _ _ = undefined
 
