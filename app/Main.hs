@@ -113,9 +113,8 @@ main :: IO ()
 main = do
     sql
     run 8081 app
-app = serve (Proxy :: Proxy (
-                PersAPI ServantDefault Sqlite Tabs
-            )) server
+
+app = serve (Proxy :: Proxy (PersAPI ServantDefault Sqlite Tabs)) server
 
 runTestDB :: PersMonad Sqlite :~> EitherT ServantErr IO
 runTestDB = Nat $ runSession sqlite "test.db"
@@ -124,9 +123,3 @@ server  = enter runTestDB
         $ persServer' (proxy# :: Proxy# Sqlite)
                       (Proxy :: Proxy Tabs)
 
-s1 = persServer' (proxy# :: Proxy# Sqlite)
-                      (Proxy :: Proxy Tab1)
-s2 = persServer' (proxy# :: Proxy# Sqlite)
-                      (Proxy :: Proxy Tab2)
-ss = persServer' (proxy# :: Proxy# Sqlite)
-                      (Proxy :: Proxy Tabs)
