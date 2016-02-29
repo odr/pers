@@ -19,16 +19,17 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TIO
 import Control.Monad.IO.Class(MonadIO(..))
 import qualified Data.Text as T
-import Control.Monad.Catch
-import Control.Monad.Trans.Either
-import Servant -- (run, serve)
-import Network.Wai.Handler.Warp
+import Control.Monad.Catch(catch, SomeException)
+import Control.Monad.Trans.Either(EitherT)
+import Servant(serve, (:~>)(..), type (:~>), ServantErr, enter)
+import Network.Wai.Handler.Warp(run)
 
 import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
 import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
 import Pers.Database.DML -- (DML(..),Cond(..),InsAutoPK(..),sel)
 import Pers.Database.Sqlite.Sqlite(Sqlite, sqlite)
 import Pers.Servant.Servant
+-- import Pers.Servant.Lucid()
 
 import Tab1
 
