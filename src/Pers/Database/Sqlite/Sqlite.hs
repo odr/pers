@@ -49,8 +49,8 @@ instance DBOption Sqlite where
     paramName _                 = format "?{}" . Only
     runSession _ par sm         = do
         conn <- liftIO $ open par
-        finally (runReaderT sm (sqlite, conn))
-                (liftIO $ close conn)
+        catch (runReaderT sm (sqlite, conn) <* liftIO (close conn))
+                (\(e::SomeException) -> liftIO (close conn) >> throwM e)
 
 instance (FieldDDL Sqlite a) => FieldDDL Sqlite (Maybe a) where
     typeName pb (_::Proxy (Maybe a))
@@ -201,8 +201,10 @@ instance    ( KnownSymbol t
     insAuto (_::Proxy '(rep, TableDef t a pk)) rs = do
         (_,conn) <- ask
         stat <- liftIO $ prepare conn $ TL.toStrict cmd
-        finally (mapM (\ps -> liftIO (stepRow stat ps) >> getPK) pss)
-                (liftIO $ finalize stat)
+        catch   ( mapM (\ps -> liftIO (stepRow stat ps) >> getPK) pss
+                    <* liftIO (finalize stat)
+                )
+                (\(e::SomeException) -> liftIO (finalize stat) >> throwM e)
       where
         (cmd, pss)= insRecCmdPars
                         (Proxy :: Proxy '(rep,Sqlite,t,MinusNames a pk))

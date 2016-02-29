@@ -10,6 +10,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module Pers.Database.DML where
 
 import GHC.Prim(Proxy#, proxy#)
@@ -36,28 +37,27 @@ class   ( TableLike a
         , Rep rep (RecordDef a) ar
         , Rep rep (Key a) kr
         )
-        => DML (rep::R) back a ar kr where
+        => DML (rep::R) back a ar kr | rep a -> ar, rep a -> kr where
     -- | Insert the list of values into database.
     -- Should create Insert-statement with parameters
     -- and execute it for all values in list
     ins ::  ( MonadIO m
-            , MonadMask m
+            , MonadCatch m
             )
             => Proxy '(rep,a) -> [ar]-> SessionMonad back m ()
     -- | Simple update by pk. Return list of pk which were updated
     upd ::  ( MonadIO m
-            , MonadMask m
+            , MonadCatch m
             )
             => Proxy '(rep,a) -> [ar] -> SessionMonad back m [kr]
     -- | Delete values by condition.
     -- Count of deleted records is returned
     del ::  ( MonadIO m
-            , MonadMask m
+            , MonadCatch m
             )
             => Proxy '(rep,a) -> Cond rep back (RecordDef a) -> SessionMonad back m Int
     selProj ::  ( MonadIO m
-                , MonadMask m
-                -- , (NamesMinus b (RecordDef a)) ~ '[]
+                , MonadCatch m
                 , ContainNames (RecordDef a) b
                 , Names b
                 , RowRepDDL rep back (ProjNames (RecordDef a) b) rr
@@ -65,6 +65,9 @@ class   ( TableLike a
             => Proxy '(rep,a,b) -> Cond rep back (RecordDef a)
             -> SessionMonad back m [rr]
            -- -> SessionMonad back m [VRec rep (ProjNames (RecordDef a) b)]
+
+-- type Proj (k::[Symbol]) a = "proj"::: ["tab":::a,"proj":::k]
+-- instance
 
 -- | Select values by condition
 sel (_::Proxy '(rep, a))
@@ -88,7 +91,7 @@ class   ( TableLike a
         )
         => InsAutoPK (rep::R) back a kr dr where
     insAuto ::  ( MonadIO m
-                , MonadMask m
+                , MonadCatch m
                 )
                 => Proxy '(rep,a) -> [dr] -> SessionMonad back m [kr]
 

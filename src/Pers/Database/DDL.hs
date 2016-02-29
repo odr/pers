@@ -62,7 +62,7 @@ class DBOption back where
     type FieldDB back
     type SessionParams back
     paramName :: Proxy# back -> Int -> Text -- ^ How to create param name (like "?1") from order
-    runSession :: (MonadIO m, MonadMask m)
+    runSession :: (MonadIO m, MonadCatch m)
             => Proxy back -> SessionParams back -> SessionMonad back m a -> m a
 
 class DDL backend a where

@@ -55,3 +55,8 @@ lensId = recLens (proxy# :: Proxy# '(Plain,Rec1,'["id":::Int64]))
 pId = Proxy :: Proxy '["id"]
 pVal = Proxy :: Proxy '["val"]
 pIdName = Proxy :: Proxy '["id","name"]
+
+type Rec2 = '["id":::Int64,"name":::T.Text,"val":::Double]
+type Tab2 = TableDef "tab2" Rec2 '["id"]
+pTab2 = Proxy :: Proxy '(Plain,Tab2)
+pTab2' = Proxy :: Proxy Tab2

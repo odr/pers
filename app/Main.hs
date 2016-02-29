@@ -5,6 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+-- {-# LANGUAGE OverlappingInstances #-}
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
 module Main where
 
@@ -19,11 +20,15 @@ import qualified Data.Text.Lazy.IO as TIO
 import Control.Monad.IO.Class(MonadIO(..))
 import qualified Data.Text as T
 import Control.Monad.Catch
+import Control.Monad.Trans.Either
+import Servant -- (run, serve)
+import Network.Wai.Handler.Warp
 
 import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
 import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
 import Pers.Database.DML -- (DML(..),Cond(..),InsAutoPK(..),sel)
-import Pers.Database.Sqlite.Sqlite(sqlite)
+import Pers.Database.Sqlite.Sqlite(Sqlite, sqlite)
+import Pers.Servant.Servant
 
 import Tab1
 
@@ -36,6 +41,16 @@ sql = do
             step1
             step2
             step3
+            catch (dropTable pTab2') (\(_::SomeException) -> return ())
+            createTable pTab2'
+            insAuto pTab2 (map ($ ())
+                [ ("один",).(1,)
+                , ("два",).(2,)
+                , ("три",).(3,)
+                , ("ארבה",).(4,)
+                , ("חמש",).(5,)
+                ])
+                >>= liftIO . print
         )
   where
     step1 = do
@@ -92,6 +107,26 @@ sql = do
 -- TODO транзакции
 -- TODO: to make conduit (or pipe) for Select
 
+type Tabs = '[Tab1, Tab2]
+
 main :: IO ()
 main = do
     sql
+    run 8081 app
+app = serve (Proxy :: Proxy (
+                PersAPI ServantDefault Sqlite Tabs
+            )) server
+
+runTestDB :: PersMonad Sqlite :~> EitherT ServantErr IO
+runTestDB = Nat $ runSession sqlite "test.db"
+
+server  = enter runTestDB
+        $ persServer' (proxy# :: Proxy# Sqlite)
+                      (Proxy :: Proxy Tabs)
+
+s1 = persServer' (proxy# :: Proxy# Sqlite)
+                      (Proxy :: Proxy Tab1)
+s2 = persServer' (proxy# :: Proxy# Sqlite)
+                      (Proxy :: Proxy Tab2)
+ss = persServer' (proxy# :: Proxy# Sqlite)
+                      (Proxy :: Proxy Tabs)

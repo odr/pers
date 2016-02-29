@@ -12,6 +12,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FunctionalDependencies #-}
+-- {-# LANGUAGE OverlappingInstances #-}
 module Pers.Types
     where
 
@@ -24,8 +25,11 @@ import GHC.Exts(Constraint)
 import qualified Data.Text as T
 import Data.Aeson(ToJSON(..),FromJSON(..),Value(..)
                 ,fromJSON, Result(..), object, (.:))
+import Data.Aeson.Types(Parser)
 import Control.Monad(mzero)
 import qualified Data.HashMap.Strict as HM
+import Lucid
+
 -- | Пара Описание и Тип-значение
 type (:::) (a :: k1) (b :: k2) = '(a,b)
 infixl 9 :::
@@ -167,12 +171,13 @@ instance    ( KnownSymbol n
   where
     toPairs prb _ (v,vs) = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
                          . toPairs prb (Proxy :: Proxy nvs) vs
-instance (ToPairs rep a ar) => ToJSON (Proxy '(rep,a), ar) where
+instance (ToPairs rep a (x,y)) => ToJSON (Proxy '(rep,a), (x,y)) where
     toJSON (_,x)
         = object
         $ toPairs (proxy# :: Proxy# rep) (Proxy :: Proxy a) x []
 
-instance FromJSON (Proxy '(Plain,'[]), ()) where
+instance FromJSON (Proxy '(Plain,'[]), ())
+  where
     parseJSON (Object v)
         | HM.null v = return (Proxy :: Proxy '(Plain,'[]), ())
         | otherwise = mzero
@@ -182,7 +187,7 @@ instance    ( KnownSymbol n
             , FromJSON v
             , FromJSON (Proxy '(Plain, nvs), vr)
             )
-    => FromJSON (Proxy '(Plain, ((n ::: v) ': nvs)), (v,vr))
+            => FromJSON (Proxy '(Plain, ((n ::: v) ': nvs)), (v,vr))
   where
     parseJSON (Object hm) = do
         (_ :: Proxy '(Plain, nvs), rest::vr) <- parseJSON (Object hm')
@@ -193,3 +198,44 @@ instance    ( KnownSymbol n
       where
         name = T.pack (symbolVal' (proxy# :: Proxy# n))
         hm' = HM.delete name hm
+
+instance (ToJSON (Proxy '(rep,a), ar)) => ToJSON (Proxy '(rep,a), [ar])
+  where
+    toJSON (p,xs) = toJSON $ map (p,) xs
+
+instance (FromJSON (Proxy '(rep,a), ar)) => FromJSON (Proxy '(rep,a), [ar])
+  where
+    parseJSON v
+        = fmap ((Proxy :: Proxy '(rep,a),) . map snd)
+            (parseJSON v :: Parser [(Proxy '(rep,a), ar)])
+
+-- HTML serialization of a single row
+instance ToHtml () where
+    toHtml      = return
+    toHtmlRaw   = return
+
+instance (ToHtml v) => ToHtml (v,()) -- no overloading with pair (Proxy,[x])
+  where
+    toHtml      = td_ . toHtml . fst
+    toHtmlRaw   = td_ . toHtmlRaw . fst
+
+instance (ToHtml v1, ToHtml (v2,vs)) => ToHtml (v1,(v2,vs))
+  where
+    toHtml (v,vs)       = td_ (toHtml v) >> toHtml vs
+    toHtmlRaw (v,vs)    = td_ (toHtmlRaw v) >> toHtmlRaw vs
+
+-- HTML serialization of a list of rows
+instance    ( ToHtml x
+            , Names (NRec a)
+            , Rep rep a x
+            )
+            => ToHtml (Proxy '(rep,a), [x])
+  where
+    toHtml (_,xs)
+        = table_ $ do
+            tr_ $ foldMap (th_ . toHtml) $ names (proxy# :: Proxy# (NRec a))
+            foldMap (tr_ . toHtml) xs
+    toHtmlRaw (_,xs)
+        = table_ $ do
+            tr_ $ foldMap (th_ . toHtmlRaw) $ names (proxy# :: Proxy# (NRec a))
+            foldMap toHtmlRaw xs
