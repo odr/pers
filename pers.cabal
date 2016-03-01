@@ -20,7 +20,7 @@ library
                         , Pers.Database.DML
                         , Pers.Database.Sqlite.Sqlite
                         , Pers.Servant.Servant
-                        , Pers.Servant.Lucid
+                        , Pers.Servant.Simple
   build-depends:       base >= 4.8 && < 5
                         , ghc-prim >= 0.4
                         , data-default

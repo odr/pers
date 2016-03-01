@@ -52,6 +52,10 @@ instance DBOption Sqlite where
         catch (runReaderT sm (sqlite, conn) <* liftIO (close conn))
                 (\(e::SomeException) -> liftIO (close conn) >> throwM e)
 
+-- type FieldSqlite = Field Sqlite
+-- toSqlite :: a -> FieldSqlite a
+-- toSqlite = Field
+--
 instance (FieldDDL Sqlite a) => FieldDDL Sqlite (Maybe a) where
     typeName pb (_::Proxy (Maybe a))
                         = typeName pb (Proxy :: Proxy a)

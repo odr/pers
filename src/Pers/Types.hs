@@ -12,6 +12,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE DeriveFunctor #-}
 -- {-# LANGUAGE OverlappingInstances #-}
 module Pers.Types
     where
@@ -154,6 +155,25 @@ recLens'    ::  ( Rep rep b br
 recLens' (_:: Proxy '(rep,b,a))
     = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
 
+-----------------
+-- data Typer a v = Typer { pTyper :: Proxy a, unTyper :: v } deriving Functor
+--
+-- instance Applicative (Typer a) where
+--     pure v = Typer (Proxy :: Proxy a) v
+--     (Typer p1 f) <*> (Typer p2 g) = Typer p2 $ f g
+--     (*>) = flip const
+--     (<*) = const
+--
+-- instance Monad (Typer a) where
+--     (Typer _ a) >>= f = f a
+--
+-- instance (ToJSON v) => ToJSON (Typer a v) where
+--     toJSON = toJSON . unTyper
+--
+-- instance (FromJSON v) => FromJSON (Typer a v) where
+--     parseJSON = fmap pure . parseJSON
+---------------
+
 class (Rep rep a ar)
     => ToPairs (rep::R) (a::[(Symbol,*)]) ar | rep a -> ar
   where
@@ -208,34 +228,3 @@ instance (FromJSON (Proxy '(rep,a), ar)) => FromJSON (Proxy '(rep,a), [ar])
     parseJSON v
         = fmap ((Proxy :: Proxy '(rep,a),) . map snd)
             (parseJSON v :: Parser [(Proxy '(rep,a), ar)])
-
--- HTML serialization of a single row
-instance ToHtml () where
-    toHtml      = return
-    toHtmlRaw   = return
-
-instance (ToHtml v) => ToHtml (v,()) -- no overloading with pair (Proxy,[x])
-  where
-    toHtml      = td_ . toHtml . fst
-    toHtmlRaw   = td_ . toHtmlRaw . fst
-
-instance (ToHtml v1, ToHtml (v2,vs)) => ToHtml (v1,(v2,vs))
-  where
-    toHtml (v,vs)       = td_ (toHtml v) >> toHtml vs
-    toHtmlRaw (v,vs)    = td_ (toHtmlRaw v) >> toHtmlRaw vs
-
--- HTML serialization of a list of rows
-instance    ( ToHtml x
-            , Names (NRec a)
-            , Rep rep a x
-            )
-            => ToHtml (Proxy '(rep,a), [x])
-  where
-    toHtml (_,xs)
-        = table_ $ do
-            tr_ $ foldMap (th_ . toHtml) $ names (proxy# :: Proxy# (NRec a))
-            foldMap (tr_ . toHtml) xs
-    toHtmlRaw (_,xs)
-        = table_ $ do
-            tr_ $ foldMap (th_ . toHtmlRaw) $ names (proxy# :: Proxy# (NRec a))
-            foldMap toHtmlRaw xs

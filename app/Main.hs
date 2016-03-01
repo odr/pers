@@ -29,6 +29,7 @@ import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
 import Pers.Database.DML -- (DML(..),Cond(..),InsAutoPK(..),sel)
 import Pers.Database.Sqlite.Sqlite(Sqlite, sqlite)
 import Pers.Servant.Servant
+import Pers.Servant.Simple
 -- import Pers.Servant.Lucid()
 
 import Tab1
@@ -115,12 +116,11 @@ main = do
     sql
     run 8081 app
 
-app = serve (Proxy :: Proxy (PersAPI ServantDefault Sqlite Tabs)) server
+app = serve (Proxy :: Proxy (PersAPI SimpleHtml Sqlite Tabs)) server
 
 runTestDB :: PersMonad Sqlite :~> EitherT ServantErr IO
 runTestDB = Nat $ runSession sqlite "test.db"
 
 server  = enter runTestDB
-        $ persServer' (proxy# :: Proxy# Sqlite)
-                      (Proxy :: Proxy Tabs)
+        $ persServerSimple (proxy# :: Proxy# Sqlite) (Proxy :: Proxy Tabs)
 
