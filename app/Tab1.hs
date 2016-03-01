@@ -26,7 +26,7 @@ type Rec1 = '["id":::Int64,"name":::T.Text,"val":::Maybe Double
              -- ,"10":::Int64,"11":::Int64,"12":::Int64
              {-  -}
              ]
-type Tab1 = TableDef "tab1" Rec1 '["id"]
+type Tab1 = TableDef "tab1" Rec1 '["id"] '[ '["name"]] '[]
 
 type PTab1Sel (a::[Symbol]) = Proxy '(Plain, Tab1, a)
 pRec1 = Proxy :: Proxy Rec1
@@ -56,7 +56,7 @@ pId = Proxy :: Proxy '["id"]
 pVal = Proxy :: Proxy '["val"]
 pIdName = Proxy :: Proxy '["id","name"]
 
-type Rec2 = '["id":::Int64,"name":::T.Text,"val":::Double]
-type Tab2 = TableDef "tab2" Rec2 '["id"]
+type Rec2 = '["id":::Int64,"name":::T.Text,"val":::Double,"tab1_id":::Int64]
+type Tab2 = TableDef "tab2" Rec2 '["id"] '[ '["name"]] '[ '["tab1_id":::"id"]:::"tab1" ]
 pTab2 = Proxy :: Proxy '(Plain,Tab2)
 pTab2' = Proxy :: Proxy Tab2

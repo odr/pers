@@ -31,6 +31,7 @@ import Control.Monad.Trans.RWS(RWS(..))
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.List(intercalate)
 import Lens.Micro((^.))
+import Control.Arrow(first)
 -- import Data.Promotion.Prelude.List((:\\))
 
 -- import Pers.TH
@@ -89,19 +90,30 @@ instance FieldDDL Sqlite ByteString where
     fromDb _ (SQLBlob a)    = Just a
     fromDb _ _              = Nothing
 
-instance (RowDDL Sqlite a, KnownSymbol n, Names pk)
-    => DDL Sqlite (TableDef n a pk)
+instance (RowDDL Sqlite a, KnownSymbol n, Names pk, Namess uk, FromFKDef fk
+        ,ContainNames a pk, CheckFK a fk, ContainNamess a uk)
+    => DDL Sqlite (TableDef n a pk uk fk)
   where
-    createTable (Proxy :: Proxy (TableDef n a pk))
+    createTable (Proxy :: Proxy (TableDef n a pk uk fk))
         = runSqliteDDL
-            $ format "CREATE TABLE IF NOT EXISTS {} ({}, PRIMARY KEY ({}))"
+            $ format "CREATE TABLE IF NOT EXISTS {} ({}, PRIMARY KEY ({}) {} {})"
                 ( symbolVal' (proxy# :: Proxy# n)
                 , TL.intercalate ","
                     $ rowCreate (proxy# :: Proxy# Sqlite) (Proxy :: Proxy a) []
                 , intercalate ","
                     $ names (proxy# :: Proxy# pk)
+                , foldMap (format ",UNIQUE ({})" . Only . intercalate ",")
+                    $ namess (proxy# :: Proxy# uk)
+                , foldMap ( format ",FOREIGN KEY ({}) REFERENCES {} ({})"
+                          . ((,,) <$> intercalate "," . fst . fst
+                                  <*> snd
+                                  <*> intercalate "," . snd . fst
+                            )
+                          . first unzip
+                          )
+                    $ fromFKDef (proxy# :: Proxy# fk)
                 )
-    dropTable (Proxy :: Proxy (TableDef n a pk))
+    dropTable (Proxy :: Proxy (TableDef n a pk uk fk))
         = runSqliteDDL
             $ format "DROP TABLE {}" $ Only $ symbolVal' (proxy# :: Proxy# n)
 
@@ -123,9 +135,9 @@ instance    ( Names (NRec a)
             , RowRepDDL rep Sqlite (ProjNames a pk) kr
             , RowRepDDL rep Sqlite (MinusNames a pk) dr
             )
-    => DML rep Sqlite (TableDef n a pk) ar kr
+    => DML rep Sqlite (TableDef n a pk uk fk) ar kr
   where
-    ins (_::Proxy '(rep, TableDef n a pk))
+    ins (_::Proxy '(rep, TableDef n a pk uk fk))
             (rs :: [ar])
         = do
             (_,conn) <- ask
@@ -136,7 +148,7 @@ instance    ( Names (NRec a)
       where
         (cmd, pss) = insRecCmdPars (Proxy :: Proxy '(rep,Sqlite,n,a)) rs
 
-    upd (p1::Proxy '(rep, TableDef n a pk)) (rs :: [ar])
+    upd (p1::Proxy '(rep, TableDef n a pk uk fk)) (rs :: [ar])
         = do
             (_,conn) <- ask
             liftIO $ P.print (cmd, pss)
@@ -152,10 +164,10 @@ instance    ( Names (NRec a)
                 )
                 (finalize stat)
       where
-        p2 = Proxy :: Proxy '(rep,Sqlite,TableDef n a pk)
+        p2 = Proxy :: Proxy '(rep,Sqlite,TableDef n a pk uk fk)
         (cmd,pss) = updRecCmdPars p2 rs
 
-    del (_ :: Proxy '(rep, TableDef n a pk)) c = do
+    del (_ :: Proxy '(rep, TableDef n a pk uk fk)) c = do
         (_,conn) <- ask
         liftIO $ P.print (cmd, ps)
         liftIO $ prepare conn (TL.toStrict cmd)
@@ -165,7 +177,7 @@ instance    ( Names (NRec a)
       where
         (cmd,ps) = delRecCmdPars (proxy# :: Proxy# n) c
 
-    selProj (_::Proxy '(rep,TableDef t a pk,b)) c = do
+    selProj (_::Proxy '(rep,TableDef t a pk uk fk,b)) c = do
         (_,conn) <- ask
         liftIO $ do
             P.print (cmd, ps)
@@ -200,9 +212,9 @@ instance    ( KnownSymbol t
             , RowRepDDL rep Sqlite (MinusNames a pk) dr
             , Rep rep (ProjNames a pk) kr
             )
-    => InsAutoPK rep Sqlite (TableDef t a pk) kr dr
+    => InsAutoPK rep Sqlite (TableDef t a pk uk fk) kr dr
   where
-    insAuto (_::Proxy '(rep, TableDef t a pk)) rs = do
+    insAuto (_::Proxy '(rep, TableDef t a pk uk fk)) rs = do
         (_,conn) <- ask
         stat <- liftIO $ prepare conn $ TL.toStrict cmd
         catch   ( mapM (\ps -> liftIO (stepRow stat ps) >> getPK) pss

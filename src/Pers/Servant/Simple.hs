@@ -96,19 +96,19 @@ instance    ( ToHtml (Simple x)
 
 
 instance    ( DBOption back
-            , DML Plain back (TableDef n rec pk)
+            , DML Plain back (TableDef n rec pk uk fk)
                             (VRec Plain rec)
                             (VRec Plain (ProjNames rec pk))
             , ContainNames rec (NRec rec)
             , Names (NRec rec)
             , RowRepDDL 'Plain back (ProjNames rec (NRec rec)) (VRec Plain rec)
             )
-    => PersServant SimpleHtml back (TableDef n rec pk)
+    => PersServant SimpleHtml back (TableDef n rec pk uk fk)
   where
-    type PersAPI SimpleHtml back (TableDef n rec pk)
+    type PersAPI SimpleHtml back (TableDef n rec pk uk fk)
         = n :> "list" :> Get '[HTML] (Proxy '(Plain, rec), Simple [(VRec Plain rec)])
 
-    persServer _ _ (_::Proxy (TableDef n rec pk)) = do
+    persServer _ _ (_::Proxy (TableDef n rec pk uk fk)) = do
         fmap ((Proxy :: Proxy '(Plain, rec),) . toSimple)
-            $ sel (Proxy :: Proxy '(Plain, TableDef n rec pk)) mempty
+            $ sel (Proxy :: Proxy '(Plain, TableDef n rec pk uk fk)) mempty
 

@@ -14,7 +14,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PolyKinds #-}
--- {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes #-}
 module Pers.Database.DDL where
 
 import Data.Proxy(Proxy(..))
@@ -30,29 +30,37 @@ import Control.Monad.IO.Class(MonadIO)
 import Control.Monad.Trans.Reader(ReaderT)
 import Control.Monad.Catch
 import Data.Type.Equality((:~:)(..), castWith)
--- import Control.Lens(Lens', (^.))
--- import Control.Lens.Getter(Getting)
 import Lens.Micro(Lens', (^.))
 import Lens.Micro.Type(Getting)
--- import Data.Promotion.Prelude.List
+import GHC.Exts(Constraint)
 
 import Pers.Types
 
-type TableDef (n :: Symbol) (rec :: [ (Symbol, *) ]) (pk :: [Symbol])
-    = "table" ::: '("name" ::: n, "rec"::: rec, "pk" ::: pk)
+data DataDef k
+    = TableDef  { name  :: Symbol
+                , rec   :: [(Symbol,k)]
+                , pk    :: [Symbol]
+                , uk    :: [[Symbol]]
+                , fk    :: [([(Symbol,Symbol)],Symbol)]
+                }
+
 
 class TableLike (a::k) where
-    type TabName (a :: k)   :: Symbol
-    type KeyDef (a :: k)    :: [Symbol]
-    type RecordDef (a :: k) :: [(Symbol,*)]
+    type TabName    (a :: k) :: Symbol
+    type KeyDef     (a :: k) :: [Symbol]
+    type RecordDef  (a :: k) :: [(Symbol,*)]
+    type UniqDef    (a :: k) :: [[Symbol]]
+    type FKDef      (a :: k) :: [([(Symbol,Symbol)],Symbol)]
 
 type Key a              = ProjNames  (RecordDef a) (KeyDef a)
 type DataRecord a       = MinusNames (RecordDef a) (KeyDef a)
 
-instance TableLike  (TableDef n rec pk) where
-    type TabName    (TableDef n rec pk) = n
-    type KeyDef     (TableDef n rec pk) = pk
-    type RecordDef  (TableDef n rec pk) = rec
+instance TableLike  (TableDef n rec pk uk fk :: DataDef *) where
+    type TabName    (TableDef n rec pk uk fk) = n
+    type RecordDef  (TableDef n rec pk uk fk) = rec
+    type KeyDef     (TableDef n rec pk uk fk) = pk
+    type UniqDef    (TableDef n rec pk uk fk) = uk
+    type FKDef      (TableDef n rec pk uk fk) = fk
 
 type SessionMonad b m = ReaderT (Proxy b, Conn b) m
 
@@ -65,7 +73,12 @@ class DBOption back where
     runSession :: (MonadIO m, MonadCatch m)
             => Proxy back -> SessionParams back -> SessionMonad back m a -> m a
 
-class DDL backend a where
+class   ( TableLike a
+        , ContainNames (RecordDef a) (KeyDef a)
+        , CheckFK (RecordDef a) (FKDef a)
+        , ContainNamess (RecordDef a) (UniqDef a)
+        )
+        => DDL backend a where
     createTable :: (MonadIO m) => Proxy a -> SessionMonad backend m ()
     dropTable   :: (MonadIO m) => Proxy a -> SessionMonad backend m ()
 
@@ -89,7 +102,6 @@ type family HasDef a :: Bool where
     HasDef (a,b) = HasDef a && HasDef b
     HasDef () = True
     HasDef a = False
-
 
 class RowDDL backend (a :: [(Symbol,*)]) where
     -- | String to describe a row for table creation
@@ -168,3 +180,23 @@ recDbData (_::Proxy '(rep,back,a)) rec
     = rowDb (proxy# :: Proxy# '(rep,back))
             (Proxy :: Proxy (DataRecord a))
             (rec ^. lensData (Proxy :: Proxy '(rep,a)))
+
+class Names2 (x :: [(Symbol,Symbol)]) where
+    names2 :: Proxy# x -> [(String,String)]
+instance Names2 '[] where names2 _ = []
+instance (Names2 xs, KnownSymbol a, KnownSymbol b) => Names2 ( '(a,b) ': xs)
+  where
+    names2 _ = (symbolVal' (proxy# :: Proxy# a), symbolVal' (proxy# :: Proxy# b))
+                : names2 (proxy# :: Proxy# xs)
+class FromFKDef (x :: [([(Symbol,Symbol)],Symbol)]) where
+    fromFKDef :: Proxy# x -> [([(String,String)], String)]
+instance FromFKDef '[] where fromFKDef _ = []
+instance (Names2 as, KnownSymbol a, FromFKDef xs) => FromFKDef ( '(as,a) ': xs)
+  where
+    fromFKDef _ = (names2 (proxy# :: Proxy# as), symbolVal' (proxy# :: Proxy# a))
+                : fromFKDef (proxy# :: Proxy# xs)
+
+type family CheckFK (a :: [(k,k2)]) (b :: [([(k,k3)],k4)]) :: Constraint where
+    CheckFK a '[] = ()
+    CheckFK a ('(bs,b) ': cs) = (ContainsFst a bs, CheckFK a cs)
+

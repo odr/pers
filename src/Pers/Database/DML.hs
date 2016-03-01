@@ -129,7 +129,6 @@ updRecCmdPars
         , RowRepDDL rep back (DataRecord t) ar
         , DBOption back
         , ContainNames (RecordDef t) (KeyDef t)
-        --  , (Key t :\\ RecordDef t) ~ '[]
         , Single rep
         )
     => Proxy '(rep,back,t) -> [s] -> (Text, [[FieldDB back]])

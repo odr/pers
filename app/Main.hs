@@ -46,11 +46,11 @@ sql = do
             catch (dropTable pTab2') (\(_::SomeException) -> return ())
             createTable pTab2'
             insAuto pTab2 (map ($ ())
-                [ ("один",).(1,)
-                , ("два",).(2,)
-                , ("три",).(3,)
-                , ("ארבה",).(4,)
-                , ("חמש",).(5,)
+                [ ("один",).(1,).(2,)
+                , ("два",).(2,).(3,)
+                , ("три",).(3,).(1,)
+                , ("ארבה",).(4,).(1,)
+                , ("חמש",).(5,).(4,)
                 ])
                 >>= liftIO . print
         )
@@ -58,8 +58,8 @@ sql = do
     step1 = do
         ins pTab1 [ rec1
                   , rec2
-                  , rec1 & lensId .~ (3,())
-                  , rec1 & lensId .~ (4,())
+                  , rec1 & lensIdName .~ (3,("odr",()))
+                  , rec1 & lensIdName .~ (4,("elena",()))
                   , rec2 & lensIdName .~ ((5,).("text4",) $ ())
                   ]
         insAuto pTab1 [("text auto 1",).(Just 1.1,).(7,).("auto",).(Just "note",).r0 {-  -} $ ()]

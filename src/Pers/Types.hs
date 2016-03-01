@@ -13,7 +13,9 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE ConstraintKinds #-}
 -- {-# LANGUAGE OverlappingInstances #-}
+-- {-# LANGUAGE AllowAmbiguousTypes #-}
 module Pers.Types
     where
 
@@ -115,12 +117,25 @@ type family ContainNames (a :: [(k,k2)]) (b :: [k]) :: Constraint where
     ContainNames as (b1 ': b2 ': bs)
         = (ContainNames as '[b1],  ContainNames as (b2 ': bs))
 
+type family Contain (a::[k]) (b::k) :: Constraint where
+    Contain (a ': as) a = ()
+    Contain (a ': as) b = Contain as b
+
 type family Contains (a::[k]) (b::[k]) :: Constraint where
     Contains as '[] = ()
-    Contains (a ': as) '[a] = ()
-    Contains (a ': as) '[b] = Contains as '[b]
-    Contains as (b1 ': b2 ': bs)
-        = (Contains as '[b1],  Contains as (b2 ': bs))
+    Contains as (b1 ': bs) = (Contain as b1,  Contains as bs)
+
+type family ContainFst (a::[(k,k1)]) (b::(k,k2)) :: Constraint where
+    ContainFst ('(a,x) ': as) '(a,y) = ()
+    ContainFst ('(a,x) ': as) '(b,y) = ContainFst as '(b,y)
+
+type family ContainsFst (a::[(k,k1)]) (b::[(k,k2)]) :: Constraint where
+    ContainsFst as '[] = ()
+    ContainsFst as (b1 ': bs) = (ContainFst as b1,  ContainsFst as bs)
+
+type family ContainNamess (a :: [(k,k2)]) (b :: [[k]]) :: Constraint where
+    ContainNamess as '[] = ()
+    ContainNamess as (b ': bs) = (ContainNames as b, ContainNamess as bs)
 
 type family MinusNames (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     MinusNames xs '[] = xs
@@ -147,7 +162,7 @@ instance (KnownSymbol s, Names ss) => Names (s ': ss) where
     symbols _ = SomeSymbol (Proxy :: Proxy s) : symbols (proxy# :: Proxy# ss)
     names _ = symbolVal' (proxy# :: Proxy# s) : names (proxy# :: Proxy# ss)
 
-recLens'    ::  ( Rep rep b br
+recLens' :: ( Rep rep b br
             , Rep rep (ProjNames b a) ar
             , RecLens rep b (ProjNames b a) br ar
             )
@@ -177,8 +192,8 @@ recLens' (_:: Proxy '(rep,b,a))
 class (Rep rep a ar)
     => ToPairs (rep::R) (a::[(Symbol,*)]) ar | rep a -> ar
   where
-    toPairs     :: Proxy# rep -> Proxy a -> ar
-                -> [(T.Text, Value)] -> [(T.Text, Value)]
+    toPairs :: Proxy# rep -> Proxy a -> ar
+            -> [(T.Text, Value)] -> [(T.Text, Value)]
 
 instance ToPairs Plain ('[]) () where
     toPairs   _ _ _ = id
@@ -228,3 +243,10 @@ instance (FromJSON (Proxy '(rep,a), ar)) => FromJSON (Proxy '(rep,a), [ar])
     parseJSON v
         = fmap ((Proxy :: Proxy '(rep,a),) . map snd)
             (parseJSON v :: Parser [(Proxy '(rep,a), ar)])
+
+class Namess (x :: [[Symbol]]) where
+    namess   :: Proxy# x -> [[String]]
+instance Namess '[] where
+    namess _ = []
+instance (Names s, Namess ss) => Namess (s ': ss) where
+    namess _ = names (proxy# :: Proxy# s) : namess (proxy# :: Proxy# ss)
