@@ -106,7 +106,8 @@ instance    ( DBOption back
     => PersServant SimpleHtml back (TableDef n rec pk uk fk)
   where
     type PersAPI SimpleHtml back (TableDef n rec pk uk fk)
-        = n :> "list" :> Get '[HTML] (Proxy '(Plain, rec), Simple [(VRec Plain rec)])
+        = n :> "list" :> Get '[JSON,HTML] (Proxy '(Plain, rec), Simple [(VRec Plain rec)])
+        -- :<|>
 
     persServer _ _ (_::Proxy (TableDef n rec pk uk fk)) = do
         fmap ((Proxy :: Proxy '(Plain, rec),) . toSimple)

@@ -106,7 +106,7 @@ instance (RowDDL Sqlite a, KnownSymbol n, Names pk, Namess uk, FromFKDef fk
                     $ namess (proxy# :: Proxy# uk)
                 , foldMap ( format ",FOREIGN KEY ({}) REFERENCES {} ({})"
                           . ((,,) <$> intercalate "," . fst . fst
-                                  <*> snd
+                                  <*> fst . snd
                                   <*> intercalate "," . snd . fst
                             )
                           . first unzip

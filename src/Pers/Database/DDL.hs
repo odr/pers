@@ -36,12 +36,23 @@ import GHC.Exts(Constraint)
 
 import Pers.Types
 
+data RefType = Parent   -- ^ reference to master data. Delete "Cascade"
+             | Ref      -- ^ reference to dictionary.
+                        -- Delete "Restricted" or "Set Null" if possible
+-- data SRefType b where
+--   SParent   :: SRefType Parent
+--   SRef      :: SRefType Ref
+class GetRefType (r::RefType) where
+    getRefType :: Proxy# (r :: RefType) -> RefType
+instance GetRefType Parent  where getRefType _ = Parent
+instance GetRefType Ref     where getRefType _ = Ref
+
 data DataDef k
     = TableDef  { name  :: Symbol
                 , rec   :: [(Symbol,k)]
                 , pk    :: [Symbol]
                 , uk    :: [[Symbol]]
-                , fk    :: [([(Symbol,Symbol)],Symbol)]
+                , fk    :: [([(Symbol,Symbol)],(Symbol,RefType))]
                 }
 
 
@@ -50,7 +61,7 @@ class TableLike (a::k) where
     type KeyDef     (a :: k) :: [Symbol]
     type RecordDef  (a :: k) :: [(Symbol,*)]
     type UniqDef    (a :: k) :: [[Symbol]]
-    type FKDef      (a :: k) :: [([(Symbol,Symbol)],Symbol)]
+    type FKDef      (a :: k) :: [([(Symbol,Symbol)],(Symbol,RefType))]
 
 type Key a              = ProjNames  (RecordDef a) (KeyDef a)
 type DataRecord a       = MinusNames (RecordDef a) (KeyDef a)
@@ -69,9 +80,10 @@ class DBOption back where
     type Conn back
     type FieldDB back
     type SessionParams back
-    paramName :: Proxy# back -> Int -> Text -- ^ How to create param name (like "?1") from order
+    paramName :: Proxy# back -> Int -> Text -- ^ How to create param name (like "?1") from param num
     runSession :: (MonadIO m, MonadCatch m)
-            => Proxy back -> SessionParams back -> SessionMonad back m a -> m a
+            => Proxy back -> SessionParams back
+            -> SessionMonad back m a -> m a
 
 class   ( TableLike a
         , ContainNames (RecordDef a) (KeyDef a)
@@ -82,7 +94,6 @@ class   ( TableLike a
     createTable :: (MonadIO m) => Proxy a -> SessionMonad backend m ()
     dropTable   :: (MonadIO m) => Proxy a -> SessionMonad backend m ()
 
--- newtype Field back a = Field a
 -- | DDL-type-information and conversion from/to type to/from database type.
 --   Database type is a type specified in db-library which
 --   present different db-types as a sum-type
@@ -111,7 +122,7 @@ class RowDDL backend (a :: [(Symbol,*)]) where
 instance RowDDL b ('[]) where
     rowCreate _ _   = id
 
-instance (FieldDDL b v, KnownSymbol n, RowDDL b nvs, Names (NRec nvs))
+instance (FieldDDL b v, KnownSymbol n, RowDDL b nvs)
     => RowDDL b ((n ::: v) ': nvs)
   where
     rowCreate pb (_ :: Proxy ((n:::v) ': nvs))
@@ -188,12 +199,17 @@ instance (Names2 xs, KnownSymbol a, KnownSymbol b) => Names2 ( '(a,b) ': xs)
   where
     names2 _ = (symbolVal' (proxy# :: Proxy# a), symbolVal' (proxy# :: Proxy# b))
                 : names2 (proxy# :: Proxy# xs)
-class FromFKDef (x :: [([(Symbol,Symbol)],Symbol)]) where
-    fromFKDef :: Proxy# x -> [([(String,String)], String)]
+class FromFKDef (x :: [([(Symbol,Symbol)],(Symbol,RefType))]) where
+    fromFKDef :: Proxy# x -> [([(String,String)], (String,RefType))]
 instance FromFKDef '[] where fromFKDef _ = []
-instance (Names2 as, KnownSymbol a, FromFKDef xs) => FromFKDef ( '(as,a) ': xs)
+instance (Names2 as, KnownSymbol a, FromFKDef xs
+        , GetRefType r) => FromFKDef ( '(as,'(a,r)) ': xs)
   where
-    fromFKDef _ = (names2 (proxy# :: Proxy# as), symbolVal' (proxy# :: Proxy# a))
+    fromFKDef _ =   ( names2 (proxy# :: Proxy# as)
+                    ,   ( symbolVal' (proxy# :: Proxy# a)
+                        , getRefType (proxy# :: Proxy# r)
+                        )
+                    )
                 : fromFKDef (proxy# :: Proxy# xs)
 
 type family CheckFK (a :: [(k,k2)]) (b :: [([(k,k3)],k4)]) :: Constraint where

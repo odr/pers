@@ -57,6 +57,7 @@ pVal = Proxy :: Proxy '["val"]
 pIdName = Proxy :: Proxy '["id","name"]
 
 type Rec2 = '["id":::Int64,"name":::T.Text,"val":::Double,"tab1_id":::Int64]
-type Tab2 = TableDef "tab2" Rec2 '["id"] '[ '["name"]] '[ '["tab1_id":::"id"]:::"tab1" ]
+type Tab2 = TableDef "tab2" Rec2 '["id"] '[ '["name"]]
+                    '[ '["tab1_id":::"id"]:::("tab1":::Ref)]
 pTab2 = Proxy :: Proxy '(Plain,Tab2)
 pTab2' = Proxy :: Proxy Tab2
