@@ -52,6 +52,7 @@ library
                         , lucid
                         , servant-lucid
                         , unordered-containers
+                        , tagged
   default-language:    Haskell2010
 
 executable pers-exe
@@ -69,8 +70,11 @@ executable pers-exe
                         , exceptions
                         , servant
                         , servant-server
+                        , servant-docs
                         , either
                         , warp
+                        , http-types
+                        , tagged
   default-language:    Haskell2010
 
 test-suite pers-test

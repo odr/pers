@@ -19,6 +19,7 @@ import Servant
 import Servant.HTML.Lucid -- (HTML)
 import Data.Aeson(ToJSON(..),FromJSON(..))
 import qualified Data.Text as T
+import Data.Tagged
 
 import Pers.Types
 import Pers.Database.DDL
@@ -26,19 +27,10 @@ import Pers.Database.DML
 import Pers.Servant.Servant
 
 data SimpleHtml
-{-
-type Simple a = Typer SimpleHtml a -- (Proxy SimpleHtml, a) --
 
-pSimple :: Proxy SimpleHtml
-pSimple = Proxy
-
+type Simple = Tagged SimpleHtml
 toSimple :: a -> Simple a
-toSimple = pure -- (pSimple,)
--}
-
-type Simple = FieldHtml SimpleHtml
-toSimple :: a -> Simple a
-toSimple = FieldHtml
+toSimple = Tagged
 
 persServerSimple :: PersServant SimpleHtml back x
     => Proxy# back -> Proxy (x::k)
@@ -47,20 +39,20 @@ persServerSimple = persServer (proxy# :: Proxy# SimpleHtml)
 
 
 instance ToHtml (Simple Int64) where
-    toHtml = toHtml . show . unFieldHtml
+    toHtml = toHtml . show . untag
     toHtmlRaw = toHtml
 
 instance ToHtml (Simple Double) where
-    toHtml = toHtml . show . unFieldHtml
+    toHtml = toHtml . show . untag
     toHtmlRaw = toHtml
 
 instance ToHtml (Simple T.Text) where
-    toHtml    = toHtml    . unFieldHtml
-    toHtmlRaw = toHtmlRaw . unFieldHtml
+    toHtml    = toHtml    . untag
+    toHtmlRaw = toHtmlRaw . untag
 
 instance (ToHtml (Simple a)) => ToHtml (Simple (Maybe a)) where
-    toHtml    = maybe (toHtml "")    (toHtml    . toSimple) . unFieldHtml
-    toHtmlRaw = maybe (toHtmlRaw "") (toHtmlRaw . toSimple) . unFieldHtml
+    toHtml    = maybe (toHtml "")    (toHtml    . toSimple) . untag
+    toHtmlRaw = maybe (toHtmlRaw "") (toHtmlRaw . toSimple) . untag
 
 -- HTML serialization of a single row
 instance ToHtml (Simple ()) where
@@ -69,14 +61,14 @@ instance ToHtml (Simple ()) where
 
 instance (ToHtml (Simple v)) => ToHtml (Simple (v,())) -- no overloading with pair (Proxy,[x])
   where
-    toHtml      = td_ . toHtml    . toSimple . fst . unFieldHtml
-    toHtmlRaw   = td_ . toHtmlRaw . toSimple . fst . unFieldHtml
+    toHtml      = td_ . toHtml    . toSimple . fst . untag
+    toHtmlRaw   = td_ . toHtmlRaw . toSimple . fst . untag
 
 instance (ToHtml (Simple v1), ToHtml (Simple (v2,vs)))
         => ToHtml (Simple (v1,(v2,vs)))
   where
-    toHtml    (FieldHtml (v,vs)) = td_ (toHtml    $ toSimple v) >> toHtml    (toSimple vs)
-    toHtmlRaw (FieldHtml (v,vs)) = td_ (toHtmlRaw $ toSimple v) >> toHtmlRaw (toSimple vs)
+    toHtml    (Tagged (v,vs)) = td_ (toHtml    $ toSimple v) >> toHtml    (toSimple vs)
+    toHtmlRaw (Tagged (v,vs)) = td_ (toHtmlRaw $ toSimple v) >> toHtmlRaw (toSimple vs)
 
 -- HTML serialization of a list of rows
 instance    ( ToHtml (Simple x)
@@ -85,32 +77,14 @@ instance    ( ToHtml (Simple x)
             )
             => ToHtml (Proxy '(rep,a), Simple [x])
   where
-    toHtml (_,(FieldHtml xs))
+    toHtml (_,(Tagged xs))
         = table_ $ do
             tr_ $ foldMap (th_ . toHtml) $ names (proxy# :: Proxy# (NRec a))
             foldMap (tr_ . toHtml . toSimple) xs
-    toHtmlRaw (_,(FieldHtml xs))
+    toHtmlRaw (_,(Tagged xs))
         = table_ $ do
             tr_ $ foldMap (th_ . toHtmlRaw) $ names (proxy# :: Proxy# (NRec a))
-            foldMap (toHtmlRaw . toSimple) xs
+            foldMap (tr_ . toHtmlRaw . toSimple) xs
 
 
-instance    ( DBOption back
-            , DML Plain back (TableDef n rec pk uk fk)
-                            (VRec Plain rec)
-                            (VRec Plain (ProjNames rec pk))
-            , ContainNames rec (NRec rec)
-            , Names (NRec rec)
-            , RowRepDDL 'Plain back (ProjNames rec (NRec rec)) (VRec Plain rec)
-            )
-    => PersServant SimpleHtml back (TableDef n rec pk uk fk)
-  where
-    type PersAPI SimpleHtml back (TableDef n rec pk uk fk)
-        = n :> "list" :> Get '[HTML,JSON] (Proxy '(Plain, rec), Simple [(VRec Plain rec)])
-
-    persServer _ _ (_::Proxy (TableDef n rec pk uk fk))
-        =   fmap ((pRec,) . toSimple) (sel pTab mempty)
-      where
-        pRec = Proxy :: Proxy '(Plain, rec)
-        pTab = Proxy :: Proxy '(Plain, TableDef n rec pk uk fk)
 

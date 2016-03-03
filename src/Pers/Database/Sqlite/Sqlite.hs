@@ -32,9 +32,7 @@ import Control.Monad.IO.Class(MonadIO(..))
 import Data.List(intercalate)
 import Lens.Micro((^.))
 import Control.Arrow(first)
--- import Data.Promotion.Prelude.List((:\\))
 
--- import Pers.TH
 import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
@@ -54,10 +52,6 @@ instance DBOption Sqlite where
         catch (runReaderT sm (sqlite, conn) <* liftIO (close conn))
                 (\(e::SomeException) -> liftIO (close conn) >> throwM e)
 
--- type FieldSqlite = Field Sqlite
--- toSqlite :: a -> FieldSqlite a
--- toSqlite = Field
---
 instance (FieldDDL Sqlite a) => FieldDDL Sqlite (Maybe a) where
     typeName pb (_::Proxy (Maybe a))
                         = typeName pb (Proxy :: Proxy a)
