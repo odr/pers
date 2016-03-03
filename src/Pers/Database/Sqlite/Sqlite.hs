@@ -49,6 +49,7 @@ instance DBOption Sqlite where
     type FieldDB Sqlite         = SQLData
     paramName _                 = format "?{}" . Only
     runSession _ par sm         = do
+        liftIO $ P.print "Make Sqlite Connection!"
         conn <- liftIO $ open par
         catch (runReaderT sm (sqlite, conn) <* liftIO (close conn))
                 (\(e::SomeException) -> liftIO (close conn) >> throwM e)

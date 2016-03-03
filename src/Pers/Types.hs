@@ -206,12 +206,6 @@ instance    ( KnownSymbol n
   where
     toPairs prb _ (v,vs) = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
                          . toPairs prb (Proxy :: Proxy nvs) vs
-{-
-instance (ToPairs rep a (x,y)) => ToJSON (Proxy '(rep,a), (x,y)) where
-    toJSON (_,x)
-        = object
-        $ toPairs (proxy# :: Proxy# rep) (Proxy :: Proxy a) x []
--}
 
 instance FromJSON (Proxy '(Plain,'[]), ())
   where
@@ -236,11 +230,14 @@ instance    ( KnownSymbol n
         name = T.pack (symbolVal' (proxy# :: Proxy# n))
         hm' = HM.delete name hm
 
-{-
+instance (ToPairs rep a (x,y)) => ToJSON (Proxy '(rep,a), (x,y)) where
+    toJSON (_,x)
+        = object
+        $ toPairs (proxy# :: Proxy# rep) (Proxy :: Proxy a) x []
+
 instance (ToJSON (Proxy '(rep,a), ar)) => ToJSON (Proxy '(rep,a), [ar])
   where
     toJSON (p,xs) = toJSON $ map (p,) xs
--}
 
 instance (FromJSON (Proxy '(rep,a), ar)) => FromJSON (Proxy '(rep,a), [ar])
   where

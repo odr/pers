@@ -17,14 +17,20 @@ import GHC.Prim(Proxy#, proxy#)
 import Servant
 import Servant.HTML.Lucid -- (HTML)
 import Control.Monad.Trans.Either
+import Data.Aeson(ToJSON(..),FromJSON(..))
 
 import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
--- import Pers.Servant.Lucid()
 
 type PersMonad back = SessionMonad back (EitherT ServantErr IO)
+
 newtype FieldHtml r a = FieldHtml { unFieldHtml :: a }
+instance (ToJSON (Proxy x, y)) => ToJSON (Proxy x, FieldHtml r y) where
+    toJSON = toJSON . fmap unFieldHtml
+
+instance (FromJSON (Proxy x, y)) => FromJSON (Proxy x, FieldHtml r y) where
+    parseJSON = fmap (fmap FieldHtml) . parseJSON
 
 class PersServant opt back (x::k) where
     type PersAPI   opt back x
