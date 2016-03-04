@@ -36,6 +36,7 @@ library
                         --
                         , servant
                         , servant-server
+                        , servant-docs
                         -- , transformers
                         , mtl
                         , either
@@ -75,6 +76,8 @@ executable pers-exe
                         , warp
                         , http-types
                         , tagged
+                        , bytestring
+                        , wai
   default-language:    Haskell2010
 
 test-suite pers-test

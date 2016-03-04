@@ -31,6 +31,7 @@ import Data.Aeson(ToJSON(..),FromJSON(..),Value(..)
 import Data.Aeson.Types(Parser)
 import Control.Monad(mzero)
 import qualified Data.HashMap.Strict as HM
+import Data.Tagged
 -- import Lucid
 
 -- | Пара Описание и Тип-значение
@@ -58,6 +59,7 @@ type family VRec (rep::R) (a :: [(k,*)]) :: * where
     VRec Plain '[ '(a,b)] = (b,())
     VRec Plain ('(a,b) ': xs) = (b, VRec Plain xs)
 
+-------------------- Lenses --------------------------------
 class (Rep rep b br, Rep rep a ar)
     => RecLens rep b a br ar    | rep b -> br
                                 , rep a -> ar
@@ -102,6 +104,15 @@ instance (Rep Plain (b ': bs) (x,xs), RecLens Plain bs '[a] xs (y,()))
     recLensB _ _ f (x,y)
         = fmap (x,)
         $ recLens (proxy# :: Proxy# '(Plain,bs,'[a])) f y
+
+recLens' :: ( Rep rep b br
+            , Rep rep (ProjNames b a) ar
+            , RecLens rep b (ProjNames b a) br ar
+            )
+    => Proxy '(rep,b,a) -> Lens' br ar
+recLens' (_:: Proxy '(rep,b,a))
+    = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
+-----------------------------------------------
 
 type family NRec (a :: [(k1,k2)]) :: [k1] where
     NRec '[] = '[]
@@ -152,6 +163,7 @@ type family ProjName  (a :: [(k,*)]) (b :: k) where
     ProjName ( '(a,b) ': xs ) a = '(a,b)
     ProjName ( '(a,b) ': xs ) c = ProjName xs c
 
+------------ Names ---------------
 class Names (x :: [Symbol]) where
     symbols :: Proxy# x -> [SomeSymbol]
     names   :: Proxy# x -> [String]
@@ -161,51 +173,30 @@ instance Names '[] where
 instance (KnownSymbol s, Names ss) => Names (s ': ss) where
     symbols _ = SomeSymbol (Proxy :: Proxy s) : symbols (proxy# :: Proxy# ss)
     names _ = symbolVal' (proxy# :: Proxy# s) : names (proxy# :: Proxy# ss)
+class Namess (x :: [[Symbol]]) where
+    namess   :: Proxy# x -> [[String]]
+instance Namess '[] where
+    namess _ = []
+instance (Names s, Namess ss) => Namess (s ': ss) where
+    namess _ = names (proxy# :: Proxy# s) : namess (proxy# :: Proxy# ss)
 
-recLens' :: ( Rep rep b br
-            , Rep rep (ProjNames b a) ar
-            , RecLens rep b (ProjNames b a) br ar
-            )
-    => Proxy '(rep,b,a) -> Lens' br ar
-recLens' (_:: Proxy '(rep,b,a))
-    = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
-
------------------
--- data Typer a v = Typer { pTyper :: Proxy a, unTyper :: v } deriving Functor
---
--- instance Applicative (Typer a) where
---     pure v = Typer (Proxy :: Proxy a) v
---     (Typer p1 f) <*> (Typer p2 g) = Typer p2 $ f g
---     (*>) = flip const
---     (<*) = const
---
--- instance Monad (Typer a) where
---     (Typer _ a) >>= f = f a
---
--- instance (ToJSON v) => ToJSON (Typer a v) where
---     toJSON = toJSON . unTyper
---
--- instance (FromJSON v) => FromJSON (Typer a v) where
---     parseJSON = fmap pure . parseJSON
----------------
-
-class (Rep rep a ar)
-    => ToPairs (rep::R) (a::[(Symbol,*)]) ar | rep a -> ar
+------------------ JSON -------------------------
+class ToPairs (ra::k) ar | ra -> ar
   where
-    toPairs :: Proxy# rep -> Proxy a -> ar
-            -> [(T.Text, Value)] -> [(T.Text, Value)]
+    toPairs :: Tagged ra ar -> [(T.Text, Value)] -> [(T.Text, Value)]
 
-instance ToPairs Plain ('[]) () where
-    toPairs   _ _ _ = id
+instance ToPairs '(Plain,'[]) () where
+    toPairs _ = id
 
 instance    ( KnownSymbol n
-            , ToPairs Plain nvs vr
+            , ToPairs '(Plain,nvs) vr
             , ToJSON v
             )
-    => ToPairs Plain ((n ::: v) ': nvs) (v,vr)
+    => ToPairs '(Plain, (n:::v) ': nvs) (v,vr)
   where
-    toPairs prb _ (v,vs) = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
-                         . toPairs prb (Proxy :: Proxy nvs) vs
+    toPairs (Tagged (v,vs))
+        = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
+        . toPairs (Tagged vs :: Tagged '(Plain, nvs) vr)
 
 instance FromJSON (Proxy '(Plain,'[]), ())
   where
@@ -230,10 +221,18 @@ instance    ( KnownSymbol n
         name = T.pack (symbolVal' (proxy# :: Proxy# n))
         hm' = HM.delete name hm
 
-instance (ToPairs rep a (x,y)) => ToJSON (Proxy '(rep,a), (x,y)) where
+instance (ToPairs '(rep, a) (x,y)) => ToJSON (Proxy '(rep,a), (x,y)) where
     toJSON (_,x)
-        = object
-        $ toPairs (proxy# :: Proxy# rep) (Proxy :: Proxy a) x []
+        = object $ toPairs (Tagged x :: Tagged '(rep,a) (x,y)) []
+
+instance (ToJSON x) => ToJSON (Tagged r x) where
+    toJSON = toJSON . untag
+instance (FromJSON x) => FromJSON (Tagged r x) where
+    parseJSON = fmap Tagged . parseJSON
+instance (ToJSON (Proxy x, y)) => ToJSON (Proxy x, Tagged r y) where
+    toJSON = toJSON . fmap untag
+instance (FromJSON (Proxy x, y)) => FromJSON (Proxy x, Tagged r y) where
+    parseJSON = fmap (fmap Tagged) . parseJSON
 
 instance (ToJSON (Proxy '(rep,a), ar)) => ToJSON (Proxy '(rep,a), [ar])
   where
@@ -244,10 +243,4 @@ instance (FromJSON (Proxy '(rep,a), ar)) => FromJSON (Proxy '(rep,a), [ar])
     parseJSON v
         = fmap ((Proxy :: Proxy '(rep,a),) . map snd)
             (parseJSON v :: Parser [(Proxy '(rep,a), ar)])
-
-class Namess (x :: [[Symbol]]) where
-    namess   :: Proxy# x -> [[String]]
-instance Namess '[] where
-    namess _ = []
-instance (Names s, Namess ss) => Namess (s ': ss) where
-    namess _ = names (proxy# :: Proxy# s) : namess (proxy# :: Proxy# ss)
+---------------------------------------

@@ -115,7 +115,7 @@ sql = do
 -- TODO транзакции
 -- TODO: to make conduit (or pipe) for Select
 
-type Tabs = '[Tab2] --, Tab2]
+type Tabs = '[Tab1, Tab2]
 
 main :: IO ()
 main = do
@@ -125,27 +125,27 @@ main = do
 type MyAPI = PersAPI SimpleHtml Sqlite Tabs
 myAPI = Proxy :: Proxy MyAPI
 
-type DocsAPI = MyAPI :<|> Raw
+type DocsAPI = MyAPI :<|> "doc.md" :> Raw
 api :: Proxy DocsAPI
 api = Proxy
 
-app = serve myAPI server
+app = serve api serverD
 
 runTestDB :: PersMonad Sqlite :~> EitherT ServantErr IO
 runTestDB = Nat $ runSession sqlite "test.db"
 
--- serverD :: Server DocsAPI
--- serverD = server :<|> serveDocs
---   where serveDocs _ respond =
---           respond $ responseLBS ok200 [plain] docsBS
---         plain = ("Content-Type", "text/plain")
+serverD :: Server DocsAPI
+serverD = server :<|> serveDocs
+  where serveDocs _ respond =
+          respond $ responseLBS ok200 [plain] docsBS
+        plain = ("Content-Type", "text/plain")
 
 server  = enter runTestDB
         $ persServerSimple (proxy# :: Proxy# Sqlite) (Proxy :: Proxy Tabs)
 
--- docsBS :: ByteString
--- docsBS = encodeUtf8
---        . pack
---        . markdown
---        $ docsWithIntros [intro] myAPI
---   where intro = DocIntro "Welcome" ["This is our super webservice's API.", "Enjoy!"]
+docsBS :: ByteString
+docsBS = encodeUtf8
+       . pack
+       . markdown
+       $ docsWithIntros [intro] myAPI
+  where intro = DocIntro "Welcome" ["This is our super webservice's API.", "Enjoy!"]

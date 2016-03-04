@@ -20,9 +20,9 @@ import Control.Monad.Catch
 import Data.Proxy(Proxy(..))
 import GHC.TypeLits(Symbol(..), KnownSymbol, SomeSymbol(..), symbolVal', symbolVal)
 import Data.Text(Text)
+import Data.Int(Int64)
 import Data.ByteString(ByteString)
 import Database.SQLite3 -- (SQLData(..), Database, exec, prepare, step, bind, finalize)
-import Data.Int(Int64)
 import qualified Data.Text.Lazy as TL
 import Data.Text.Format -- (format)
 import Control.Monad(foldM)
@@ -49,8 +49,10 @@ instance DBOption Sqlite where
     runSession _ par sm         = do
         liftIO $ P.print "Make Sqlite Connection!"
         conn <- liftIO $ open par
-        catch (runReaderT sm (sqlite, conn) <* liftIO (close conn))
-                (\(e::SomeException) -> liftIO (close conn) >> throwM e)
+        -- liftIO $ catch (exec conn "PRAGMA foreign_keys = ON;")
+        --             (\(_::SomeException) -> return ()) -- for sqlite3
+        catch (runReaderT sm (sqlite, conn) <* liftIO (close conn >> P.print "closed!!!"))
+                (\(e::SomeException) -> liftIO (close conn >> P.print "closed!!!") >> throwM e)
 
 instance (FieldDDL Sqlite a) => FieldDDL Sqlite (Maybe a) where
     typeName pb (_::Proxy (Maybe a))
@@ -113,7 +115,9 @@ instance (RowDDL Sqlite a, KnownSymbol n, Names pk, Namess uk, FromFKDef fk
             $ format "DROP TABLE {}" $ Only $ symbolVal' (proxy# :: Proxy# n)
 
 runSqliteDDL :: (MonadIO m) => TL.Text -> SessionMonad Sqlite m ()
-runSqliteDDL cmd = ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
+runSqliteDDL cmd = do
+    liftIO $ P.print cmd
+    ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
 
 instance AutoGenPK Sqlite (Int64,()) where
     getPK = ask >>= \(_,conn) -> fmap (,()) (liftIO (lastInsertRowId conn))
@@ -135,6 +139,7 @@ instance    ( Names (NRec a)
     ins (_::Proxy '(rep, TableDef n a pk uk fk))
             (rs :: [ar])
         = do
+            liftIO $ putStrLn "ins!"
             (_,conn) <- ask
             liftIO $ P.print (cmd, pss)
             stat <- liftIO $ prepare conn $ TL.toStrict cmd
@@ -145,6 +150,7 @@ instance    ( Names (NRec a)
 
     upd (p1::Proxy '(rep, TableDef n a pk uk fk)) (rs :: [ar])
         = do
+            liftIO $ putStrLn "upd!"
             (_,conn) <- ask
             liftIO $ P.print (cmd, pss)
             stat <- liftIO $ prepare conn $ TL.toStrict cmd
@@ -163,6 +169,7 @@ instance    ( Names (NRec a)
         (cmd,pss) = updRecCmdPars p2 rs
 
     del (_ :: Proxy '(rep, TableDef n a pk uk fk)) c = do
+        liftIO $ putStrLn "del!"
         (_,conn) <- ask
         liftIO $ P.print (cmd, ps)
         liftIO $ prepare conn (TL.toStrict cmd)
@@ -173,6 +180,7 @@ instance    ( Names (NRec a)
         (cmd,ps) = delRecCmdPars (proxy# :: Proxy# n) c
 
     selProj (_::Proxy '(rep,TableDef t a pk uk fk,b)) c = do
+        liftIO $ putStrLn "sel!"
         (_,conn) <- ask
         liftIO $ do
             P.print (cmd, ps)

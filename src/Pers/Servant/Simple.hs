@@ -75,16 +75,13 @@ instance    ( ToHtml (Simple x)
             , Names (NRec a)
             , Rep rep a x
             )
-            => ToHtml (Proxy '(rep,a), Simple [x])
+            => ToHtml (Simple (Proxy '(rep,a), [x]))
   where
-    toHtml (_,(Tagged xs))
+    toHtml (Tagged (_,xs))
         = table_ $ do
             tr_ $ foldMap (th_ . toHtml) $ names (proxy# :: Proxy# (NRec a))
             foldMap (tr_ . toHtml . toSimple) xs
-    toHtmlRaw (_,(Tagged xs))
+    toHtmlRaw (Tagged (_,xs))
         = table_ $ do
             tr_ $ foldMap (th_ . toHtmlRaw) $ names (proxy# :: Proxy# (NRec a))
             foldMap (tr_ . toHtmlRaw . toSimple) xs
-
-
-
