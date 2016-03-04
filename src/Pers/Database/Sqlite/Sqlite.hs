@@ -12,6 +12,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ConstraintKinds #-}
 module Pers.Database.Sqlite.Sqlite where
 
 import Prelude as P
@@ -32,6 +34,7 @@ import Control.Monad.IO.Class(MonadIO(..))
 import Data.List(intercalate)
 import Lens.Micro((^.))
 import Control.Arrow(first)
+import GHC.Exts(Constraint)
 
 import Pers.Types
 import Pers.Database.DDL
@@ -119,8 +122,10 @@ runSqliteDDL cmd = do
     liftIO $ P.print cmd
     ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
 
-instance AutoGenPK Sqlite (Int64,()) where
-    getPK = ask >>= \(_,conn) -> fmap (,()) (liftIO (lastInsertRowId conn))
+type family IsInt64 (pk :: [(k,*)]) :: Constraint where
+    IsInt64 '[ '(x,Int64)] = ()
+
+type instance IsAutoPK rep Sqlite kr = kr ~ Singl rep Int64
 
 instance    ( Names (NRec a)
             , KnownSymbol n
@@ -134,10 +139,9 @@ instance    ( Names (NRec a)
             , RowRepDDL rep Sqlite (ProjNames a pk) kr
             , RowRepDDL rep Sqlite (MinusNames a pk) dr
             )
-    => DML rep Sqlite (TableDef n a pk uk fk) ar kr
+    => DML rep Sqlite (TableDef n a pk uk fk) ar kr dr
   where
-    ins (_::Proxy '(rep, TableDef n a pk uk fk))
-            (rs :: [ar])
+    ins _ rs
         = do
             liftIO $ putStrLn "ins!"
             (_,conn) <- ask
@@ -148,7 +152,22 @@ instance    ( Names (NRec a)
       where
         (cmd, pss) = insRecCmdPars (Proxy :: Proxy '(rep,Sqlite,n,a)) rs
 
-    upd (p1::Proxy '(rep, TableDef n a pk uk fk)) (rs :: [ar])
+    insAuto (_::Proxy '(rep, TableDef t a pk uk fk)) rs = do
+        (_,conn) <- ask
+        stat <- liftIO $ prepare conn $ TL.toStrict cmd
+        catch   ( mapM  (\ps -> liftIO $ stepRow stat ps
+                        >> fmap (single (proxy# :: Proxy# rep))
+                                (lastInsertRowId conn)
+                        ) pss
+                    <* liftIO (finalize stat)
+                )
+                (\(e::SomeException) -> liftIO (finalize stat) >> throwM e)
+      where
+        (cmd, pss)= insRecCmdPars
+                        (Proxy :: Proxy '(rep,Sqlite,t,MinusNames a pk))
+                        rs
+
+    upd p1 rs
         = do
             liftIO $ putStrLn "upd!"
             (_,conn) <- ask
@@ -168,7 +187,7 @@ instance    ( Names (NRec a)
         p2 = Proxy :: Proxy '(rep,Sqlite,TableDef n a pk uk fk)
         (cmd,pss) = updRecCmdPars p2 rs
 
-    del (_ :: Proxy '(rep, TableDef n a pk uk fk)) c = do
+    del _ c = do
         liftIO $ putStrLn "del!"
         (_,conn) <- ask
         liftIO $ P.print (cmd, ps)
@@ -208,26 +227,6 @@ instance    ( Names (NRec a)
                     $ "Invalid Select. Error in column conversion with fields "
                     ++ intercalate ", " (map (\(SomeSymbol s) -> symbolVal s) ss)
                 Right a -> a
-
-instance    ( KnownSymbol t
-            , Names (NRec (MinusNames a pk))
-            , AutoGenPK Sqlite kr
-            , RowRepDDL rep Sqlite (MinusNames a pk) dr
-            , Rep rep (ProjNames a pk) kr
-            )
-    => InsAutoPK rep Sqlite (TableDef t a pk uk fk) kr dr
-  where
-    insAuto (_::Proxy '(rep, TableDef t a pk uk fk)) rs = do
-        (_,conn) <- ask
-        stat <- liftIO $ prepare conn $ TL.toStrict cmd
-        catch   ( mapM (\ps -> liftIO (stepRow stat ps) >> getPK) pss
-                    <* liftIO (finalize stat)
-                )
-                (\(e::SomeException) -> liftIO (finalize stat) >> throwM e)
-      where
-        (cmd, pss)= insRecCmdPars
-                        (Proxy :: Proxy '(rep,Sqlite,t,MinusNames a pk))
-                        rs
 
 stepRow :: Statement -> [SQLData] -> IO ()
 stepRow stat ps = do

@@ -60,6 +60,7 @@ instance    ( DBOption back
             , DML Plain back (TableDef n rec pk uk fk)
                             (VRec Plain rec)
                             (VRec Plain (ProjNames rec pk))
+                            (VRec Plain (MinusNames rec pk))
             , ContainNames rec (NRec rec)
             , ContainNames rec pk
             , Names (NRec rec)
