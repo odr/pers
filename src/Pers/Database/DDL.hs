@@ -66,6 +66,19 @@ class TableLike (a::k) where
 type Key a              = ProjNames  (RecordDef a) (KeyDef a)
 type DataRecord a       = MinusNames (RecordDef a) (KeyDef a)
 
+type family Keys (as::[k]) :: [[(Symbol,*)]] where
+    Keys '[] = '[]
+    Keys (x ': xs) = Key x ': Keys xs
+
+type family DataRecords (as::[k]) :: [[(Symbol,*)]] where
+    DataRecords '[] = '[]
+    DataRecords (x ': xs) = DataRecord x ': DataRecords xs
+
+type family RecordDefs (as::[k]) :: [[(Symbol,*)]] where
+    RecordDefs '[] = '[]
+    RecordDefs (x ': xs) = RecordDef x ': RecordDefs xs
+
+
 instance TableLike  (TableDef n rec pk uk fk :: DataDef *) where
     type TabName    (TableDef n rec pk uk fk) = n
     type RecordDef  (TableDef n rec pk uk fk) = rec

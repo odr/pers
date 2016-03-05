@@ -35,6 +35,7 @@ import Data.List(intercalate)
 import Lens.Micro((^.))
 import Control.Arrow(first)
 import GHC.Exts(Constraint)
+import Data.Type.Equality(type (==))
 
 import Pers.Types
 import Pers.Database.DDL
@@ -91,7 +92,8 @@ instance FieldDDL Sqlite ByteString where
     fromDb _ _              = Nothing
 
 instance (RowDDL Sqlite a, KnownSymbol n, Names pk, Namess uk, FromFKDef fk
-        ,ContainNames a pk, CheckFK a fk, ContainNamess a uk)
+        ,ContainNames a pk, CheckFK a fk, ContainNamess a uk
+        )
     => DDL Sqlite (TableDef n a pk uk fk)
   where
     createTable (Proxy :: Proxy (TableDef n a pk uk fk))
@@ -122,10 +124,8 @@ runSqliteDDL cmd = do
     liftIO $ P.print cmd
     ask >>= \(_,conn) -> liftIO (exec conn $ TL.toStrict cmd)
 
-type family IsInt64 (pk :: [(k,*)]) :: Constraint where
-    IsInt64 '[ '(x,Int64)] = ()
-
 type instance IsAutoPK rep Sqlite kr = kr ~ Singl rep Int64
+type instance IsAutoPKb rep Sqlite kr = kr == Singl rep Int64
 
 instance    ( Names (NRec a)
             , KnownSymbol n

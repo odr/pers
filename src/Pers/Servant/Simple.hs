@@ -32,10 +32,10 @@ type Simple = Tagged SimpleHtml
 toSimple :: a -> Simple a
 toSimple = Tagged
 
-persServerSimple :: PersServant SimpleHtml back x
-    => Proxy# back -> Proxy (x::k)
-    -> ServerT (PersAPI SimpleHtml back x) (PersMonad back)
-persServerSimple = persServer (proxy# :: Proxy# SimpleHtml)
+persServerSimple :: PersServant' rep SimpleHtml back x
+    => Proxy# rep -> Proxy# back -> Proxy (x::[(DataDef *,*,*,*)])
+    -> ServerT (PersAPI' rep SimpleHtml back x) (PersMonad back)
+persServerSimple pr = persServer' pr (proxy# :: Proxy# SimpleHtml)
 
 
 instance ToHtml (Simple Int64) where

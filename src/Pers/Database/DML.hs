@@ -35,7 +35,8 @@ import GHC.Exts(Constraint)
 import Pers.Types
 import Pers.Database.DDL
 
-type family IsAutoPK (rep::R) back kr :: Constraint
+type family IsAutoPK  (rep::R) back kr :: Constraint
+type family IsAutoPKb (rep::R) back kr :: Bool
 
 class   ( TableLike a
         , Rep rep (RecordDef a) ar

@@ -32,6 +32,7 @@ import Data.Aeson.Types(Parser)
 import Control.Monad(mzero)
 import qualified Data.HashMap.Strict as HM
 import Data.Tagged
+-- import Data.Singletons.Prelude
 -- import Lucid
 
 -- | Пара Описание и Тип-значение
@@ -55,9 +56,13 @@ instance Rep Plain '[] ()
 instance (Rep Plain xs c) => Rep Plain ('(a,b) ': xs) (b, c)
 
 type family VRec (rep::R) (a :: [(k,*)]) :: * where
-    VRec Plain '[] = ()
-    VRec Plain '[ '(a,b)] = (b,())
-    VRec Plain ('(a,b) ': xs) = (b, VRec Plain xs)
+    VRec Plain '[]              = ()
+    VRec Plain '[ '(a,b)]       = (b,())
+    VRec Plain ('(a,b) ': xs)   = (b, VRec Plain xs)
+
+type family VRecs (rep::R) (a :: [[(k,*)]]) :: [*] where
+    VRecs rep '[]       = '[]
+    VRecs rep (x ': xs) = VRec rep x ': VRecs rep xs
 
 -------------------- Lenses --------------------------------
 class (Rep rep b br, Rep rep a ar)
@@ -112,6 +117,7 @@ recLens' :: ( Rep rep b br
     => Proxy '(rep,b,a) -> Lens' br ar
 recLens' (_:: Proxy '(rep,b,a))
     = recLens (proxy# :: Proxy# '(rep, b, ProjNames b a))
+
 -----------------------------------------------
 
 type family NRec (a :: [(k1,k2)]) :: [k1] where

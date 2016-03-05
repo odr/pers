@@ -59,6 +59,8 @@ sql = do
                 , ("חמש",).(5,).(4,)
                 ])
                 >>= liftIO . print
+            catch (dropTable pTab3') (\(_::SomeException) -> return ())
+            createTable pTab3'
         )
   where
     step1 = do
@@ -115,14 +117,14 @@ sql = do
 -- TODO транзакции
 -- TODO: to make conduit (or pipe) for Select
 
-type Tabs = '[Tab1, Tab2]
+type Tabs = ServDatas Plain '[Tab1, Tab2, Tab3]
 
 main :: IO ()
 main = do
     sql
     run 8081 app
 
-type MyAPI = PersAPI SimpleHtml Sqlite Tabs
+type MyAPI = PersAPI' Plain SimpleHtml Sqlite Tabs
 myAPI = Proxy :: Proxy MyAPI
 
 type DocsAPI = MyAPI :<|> "doc.md" :> Raw
@@ -141,7 +143,9 @@ serverD = server :<|> serveDocs
         plain = ("Content-Type", "text/plain")
 
 server  = enter runTestDB
-        $ persServerSimple (proxy# :: Proxy# Sqlite) (Proxy :: Proxy Tabs)
+        $ persServerSimple  (proxy# :: Proxy# Plain)
+                            (proxy# :: Proxy# Sqlite)
+                            (Proxy  :: Proxy Tabs)
 
 docsBS :: ByteString
 docsBS = encodeUtf8

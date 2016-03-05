@@ -54,6 +54,7 @@ library
                         , servant-lucid
                         , unordered-containers
                         , tagged
+                        , singletons
   default-language:    Haskell2010
 
 executable pers-exe
@@ -78,6 +79,7 @@ executable pers-exe
                         , tagged
                         , bytestring
                         , wai
+                        , singletons
   default-language:    Haskell2010
 
 test-suite pers-test
