@@ -32,6 +32,7 @@ import Data.Aeson.Types(Parser)
 import Control.Monad(mzero)
 import qualified Data.HashMap.Strict as HM
 import Data.Tagged
+import Data.Promotion.Prelude.List(type (:++))
 -- import Data.Singletons.Prelude
 -- import Lucid
 
@@ -164,6 +165,8 @@ type family ProjNames  (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     ProjNames xs '[] = '[]
     ProjNames xs '[c] = '[ProjName xs c]
     ProjNames xs (y ': ys) = ProjName xs y ': ProjNames xs ys
+
+type DataKeyDef a pk = MinusNames a pk :++ ProjNames a pk
 
 type family ProjName  (a :: [(k,*)]) (b :: k) where
     ProjName ( '(a,b) ': xs ) a = '(a,b)

@@ -132,12 +132,15 @@ instance    ( Names (NRec a)
             , Single rep
             , ContainNames a pk
             , RecLens rep a (ProjNames a pk) ar kr
-            , RecLens rep a (MinusNames a pk) ar dr
             , Names (NRec (MinusNames a pk))
             , Names pk
             , RowRepDDL rep Sqlite a ar
             , RowRepDDL rep Sqlite (ProjNames a pk) kr
             , RowRepDDL rep Sqlite (MinusNames a pk) dr
+            , Names (NRec (DataKeyDef a pk))
+            , Rep rep (DataKeyDef a pk) ar'
+            , RecLens rep a (DataKeyDef a pk) ar ar'
+            , RowRepDDL rep Sqlite (DataKeyDef a pk) ar'
             )
     => DML rep Sqlite (TableDef n a pk uk fk) ar kr dr
   where

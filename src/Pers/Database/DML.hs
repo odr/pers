@@ -26,7 +26,7 @@ import GHC.TypeLits
 import Data.Type.Equality -- (type (==))
 import Data.Type.Bool -- (type (||))
 import Data.Text.Format(format, Only(..))
--- import Data.Promotion.Prelude.List
+import Data.Promotion.Prelude.List(type (:++))
 import Data.List(intercalate)
 import Lens.Micro((^.))
 import GHC.Exts(Constraint)
@@ -143,22 +143,22 @@ insRecCmdPars (p::Proxy '(rep,back,t,r)) rs
     =   ( insRecCmd p
         , map (rowDb (proxy# :: Proxy# '(rep,back)) (Proxy::Proxy r)) rs
         )
-
+type DataKey t = DataRecord t :++ Key t
 updRecCmdPars
     :: (KnownSymbol (TabName t)
         , RecLens rep (RecordDef t) (Key t) s br
-        , RecLens rep (RecordDef t) (DataRecord t) s ar
+        , RecLens rep (RecordDef t) (DataKey t) s ar
         , Names (KeyDef t)
-        , Names (NRec (DataRecord t))
+        , Names (NRec (DataKey t))
         , RowRepDDL rep back (Key t) br
-        , RowRepDDL rep back (DataRecord t) ar
+        , RowRepDDL rep back (DataKey t) ar
         , DBOption back
         , ContainNames (RecordDef t) (KeyDef t)
         , Single rep
         )
     => Proxy '(rep,back,t) -> [s] -> (Text, [[FieldDB back]])
 updRecCmdPars (_ :: Proxy '(rep,back,t)) [] = mempty
-updRecCmdPars (proxy :: Proxy '(rep,back,t)) (rec:recs)
+updRecCmdPars (proxy :: Proxy '(rep,back,t)) recs@(rec:_)
     =   ( format "UPDATE {} SET {} WHERE {}"
             ( symbolVal' (proxy# :: Proxy# (TabName t))
             , TL.intercalate ","
@@ -167,16 +167,24 @@ updRecCmdPars (proxy :: Proxy '(rep,back,t)) (rec:recs)
                     ) [1..] ns
             , w
             )
-        , (dataDb rec ++ p) : map ((++) <$> dataDb <*> keyDb) recs
+        , map dataKey recs
         )
   where
-    ns = names (proxy# :: Proxy# (NRec (DataRecord t)))
-    (w,_,p) = runRWS (sqlWhere $ cond key) () (length ns + 1)
+    ns = names (proxy# :: Proxy# (NRec (DataKey t)))
+    (w,_,_) = runRWS (sqlWhere $ cond key) () (length ns + 1)
       where
         cond r = Equal (Proxy :: Proxy (KeyDef t)) r :: Cond rep back (RecordDef t)
         key = rec ^. recLens (proxy#::Proxy# '(rep,RecordDef t,Key t))
-    keyDb   = recDbPk   proxy
-    dataDb  = recDbData proxy
+    -- (++) <$> dataDb <*> keyDb
+    dataKey r
+        = rowDb (proxy# :: Proxy# '(rep,back))
+                (Proxy :: Proxy (DataKey t))
+                (r ^. recLens (proxy#::Proxy#  '( rep, RecordDef t, DataKey t ))
+                              -- (Proxy :: Proxy '(rep,t))
+                )
+
+--    keyDb   = recDbPk   proxy
+--    dataDb  = recDbData proxy
 
 -- class AutoGenPK back a where
 --     getPK :: (MonadIO m) => SessionMonad back m a

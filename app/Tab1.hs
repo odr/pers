@@ -62,7 +62,7 @@ type Tab2 = TableDef "tab2" Rec2 '["id"] '[ '["name"]]
 pTab2 = Proxy :: Proxy '(Plain,Tab2)
 pTab2' = Proxy :: Proxy Tab2
 
-type Rec3 = ["t1_id":::Int64,"t2_id":::Int64,"val":::Int64]
+type Rec3 = ["t1_id":::Int64,"t2_id":::Int64]
 type Tab3 = TableDef "tab3" Rec3 '["t1_id","t2_id"] '[]
        '[ '["t1_id":::"id"]:::("tab1":::Parent)
         , '["t2_id":::"id"]:::("tab2":::Parent)
