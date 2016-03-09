@@ -25,6 +25,7 @@ import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
 import Pers.Servant.Servant
+import Servant.Docs
 
 data SimpleHtml
 
@@ -36,6 +37,11 @@ persServerSimple :: PersServant' rep SimpleHtml back x
     => Proxy# rep -> Proxy# back -> Proxy (x::[(DataDef *,*,*,*)])
     -> ServerT (PersAPI' rep SimpleHtml back x) (PersMonad back)
 persServerSimple pr = persServer' pr (proxy# :: Proxy# SimpleHtml)
+
+instance (ToSample x x) => ToSample (Simple x) (Simple x) where
+    toSample _ = fmap Tagged $ toSample (Proxy :: Proxy x)
+instance (ToJSON x) => ToJSON (Simple x) where
+    toJSON = toJSON . untag
 
 
 instance ToHtml (Simple Int64) where
@@ -75,13 +81,13 @@ instance    ( ToHtml (Simple x)
             , Names (NRec a)
             , Rep rep a x
             )
-            => ToHtml (Simple (Proxy '(rep,a), [x]))
+            => ToHtml (Simple (Tagged '(rep,a) [x]))
   where
-    toHtml (Tagged (_,xs))
+    toHtml (Tagged (Tagged xs))
         = table_ $ do
             tr_ $ foldMap (th_ . toHtml) $ names (proxy# :: Proxy# (NRec a))
             foldMap (tr_ . toHtml . toSimple) xs
-    toHtmlRaw (Tagged (_,xs))
+    toHtmlRaw (Tagged (Tagged xs))
         = table_ $ do
             tr_ $ foldMap (th_ . toHtmlRaw) $ names (proxy# :: Proxy# (NRec a))
             foldMap (tr_ . toHtmlRaw . toSimple) xs

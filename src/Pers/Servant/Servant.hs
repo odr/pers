@@ -17,6 +17,7 @@ import Data.Proxy(Proxy(..))
 import GHC.Prim(Proxy#, proxy#)
 import Servant
 import Control.Monad.Trans.Either
+-- import Control.Monad.Except
 import Data.Aeson(ToJSON(..),FromJSON(..), encode)
 import Servant.HTML.Lucid(HTML)
 import Servant.Docs
@@ -34,6 +35,7 @@ import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
 
+-- type PersMonad back = SessionMonad back (ExceptT ServantErr IO)
 type PersMonad back = SessionMonad back (EitherT ServantErr IO)
 
 type ServData rep x
@@ -78,10 +80,8 @@ instance    ( PersServant' rep opt back '[a]
         = persServer' pr po pb (Proxy :: Proxy '[a])
         :<|> persServer' pr po pb (Proxy :: Proxy (a1 ': as))
 
-type PRecs rep rec ar = (Proxy '(rep, rec), [ar])
-type PPks rep rec pk kr = (Proxy '(rep, ProjNames rec pk), [kr])
--- type PDrs rep (rec::[(Symbol,*)]) pk
---     = (Proxy '(Plain, MinusNames rec pk), [VRec Plain (MinusNames rec pk)])
+type PRecs rep rec ar = Tagged ('(rep, rec)) [ar]
+type PPks rep rec pk kr = Tagged ('(rep, ProjNames rec pk)) [kr]
 
 instance    ( DBOption back
             , DML rep back (TableDef n rec pk uk fk) ar kr dr
@@ -93,7 +93,6 @@ instance    ( DBOption back
             , RowRepDDL rep back (ProjNames rec pk) kr
             , PersServantIns (IsAutoPKb rep back kr) rep back
                              (TableDef n rec pk uk fk) ar kr dr
-            -- , RowRepDDL rep back (MinusNames rec pk) dr
             )
     => PersServant (rep::R) opt back (TableDef n rec pk uk fk) ar kr dr
   where
@@ -101,7 +100,6 @@ instance    ( DBOption back
         n :> (
             Get '[HTML,JSON] (Tagged opt (PRecs rep rec ar))
             :<|>
-            -- ReqBody '[JSON] (PRecs rep rec ar) :> Post '[JSON] ()
             PersInsAPI (IsAutoPKb rep back kr) rep back
                         (TableDef n rec pk uk fk) ar kr dr
             :<|>
@@ -111,23 +109,14 @@ instance    ( DBOption back
             ReqBody '[JSON] (PPks rep rec pk kr)
                    :> Delete '[JSON] Int
             )
-    persServer pr _ pb pa = -- (_::Proxy (TableDef n rec pk uk fk)) =
-        fmap (Tagged . (pRec,)) (sel pTab mempty)
-        -- :<|>
-        -- (case eqT :: Maybe (IsAutoPKb Plain back
-        --                     (VRec Plain (ProjNames rec pk)) :~: True) of
-        --     Nothing   -> ins pTab . snd
-        --     Just Refl -> insAuto pTab
-        -- )
+    persServer pr _ pb pa =
+        fmap (Tagged . Tagged) (sel pTab mempty)
         :<|>
-        -- ins pTab . snd
         persInsServer (proxy# :: Proxy# (IsAutoPKb rep back kr)) pr pb pa
-        -- :<|>
-        -- insAuto pTab
         :<|>
-        fmap (pPk,) . upd pTab . snd
+        fmap Tagged . upd pTab . untag
         :<|>
-        fmap sum . mapM (del pTab . Equal pPkN) . snd
+        fmap sum . mapM (del pTab . Equal pPkN) . untag
       where
         pRec = Proxy :: Proxy '(rep, rec)
         pTab = Proxy :: Proxy '(rep, TableDef n rec pk uk fk)
@@ -147,28 +136,44 @@ class   ( TableLike a
     persInsServer :: Proxy# isAuto -> Proxy# rep -> Proxy# back -> Proxy '(a,ar,kr,dr)
         -> ServerT (PersInsAPI isAuto rep back a ar kr dr) (PersMonad back)
 
-instance (DML rep back a ar kr dr, IsAutoPK rep back kr)
+instance (DML rep back a ar kr dr, IsAutoPK rep back kr, TableLike a)
         => PersServantIns True rep back a ar kr dr
   where
     type PersInsAPI True rep back a ar kr dr
-        = ReqBody '[JSON] (PRecs rep (DataRecord a) dr) :> Post '[JSON] [kr]
-    persInsServer _ _ _ _ = insAuto pTab . snd
+        = ReqBody '[JSON] (PRecs rep (DataRecord a) dr)
+        :> Post '[JSON] (Tagged '(rep,Key a) [kr])
+    persInsServer _ _ _ _ = fmap Tagged . insAuto pTab . untag
       where
         pTab = Proxy :: Proxy '(rep, a)
 
-instance (DML rep back a ar kr dr)
+instance (DML rep back a ar kr dr, TableLike a)
         => PersServantIns False rep back a ar kr dr
   where
     type PersInsAPI False rep back a ar kr dr
-        = ReqBody '[JSON] (PRecs rep (RecordDef a) ar) :> Post '[JSON] ()
-    persInsServer _ _ _ _ = ins pTab . snd
+        = ReqBody '[JSON] (PRecs rep (RecordDef a) ar)
+        :> Post '[JSON] ()
+    persInsServer _ _ _ _ = ins pTab . untag
       where
         pTab = Proxy :: Proxy '(rep, a)
 
 --------- ServantDoc ---------------
-
-instance (ToSample x x) => ToSample (Tagged r x) (Tagged r x) where
-    toSample _ = fmap Tagged $ toSample (Proxy :: Proxy x)
+{-
+instance (ToSample x) => ToSample (Tagged r x) where
+    toSamples _ = map (fmap Tagged) $ toSamples (Proxy :: Proxy x)
+instance ToSample Int where
+    toSamples _ = [("val",1)]
+instance ToSample Int64 where
+    toSamples _ = [("val",64)]
+instance ToSample Double where
+    toSamples _ = [("val",1.2)]
+instance ToSample Text where
+    toSamples _ = [("E","English"), ("R","Русский"), ("H","עברית"), ("J","日本の")]
+instance ToSample ByteString where
+    toSamples _ = [("ByteString", "Some long text")]
+-}
+-- {-
+--instance (ToSample x x) => ToSample (Tagged r x) (Tagged r x) where
+--    toSample _ = fmap Tagged $ toSample (Proxy :: Proxy x)
 
 -- Надо делать спец типы и их для разных БД адаптировать и для документации
 instance ToSample () () where
@@ -197,38 +202,35 @@ instance (ToSample a b) => ToSample (Maybe a) (Maybe b) where
     toSample _ = Just $ toSample (Proxy :: Proxy a)
 
 instance (ToSample v v')
-    => ToSample (Proxy '(Plain, '(n,v)), v)
-                (Proxy '(Plain, '(n,v)), v')
+    => ToSample (Tagged '(Plain, '(n,v)) v)
+                (Tagged '(Plain, '(n,v)) v')
   where
-    toSample _  = fmap (Proxy :: Proxy '(Plain, '(n,v)),)
-                $ toSample (Proxy :: Proxy v)
+    toSample _  = fmap Tagged $ toSample (Proxy :: Proxy v)
 
 instance (ToSample v v')
-    => ToSample (Proxy '(Plain, '[ '(n,v)]), (v,()))
-                (Proxy '(Plain, '[ '(n,v)]), (v',()))
+    => ToSample (Tagged '(Plain, '[ '(n,v)]) (v ,()))
+                (Tagged '(Plain, '[ '(n,v)]) (v',()))
   where
-    toSample _  = fmap ((Proxy :: Proxy '(Plain, '[ '(n,v)]),) . (,()))
-                $ toSample (Proxy :: Proxy v)
+    toSample _  = fmap (Tagged . (,())) $ toSample (Proxy :: Proxy v)
 
 instance (Rep Plain (x1 ': xs) rs
         , Rep Plain '[x] (r,())
-        , ToSample (Proxy '(Plain, x), r) (Proxy '(Plain, x), r')
-        , ToSample (Proxy '(Plain, x1 ': xs), rs) (Proxy '(Plain, x1 ': xs), rs')
+        , ToSample (Tagged '(Plain, x) r) (Tagged '(Plain, x) r')
+        , ToSample (Tagged '(Plain, x1 ': xs) rs) (Tagged '(Plain, x1 ': xs) rs')
         )
-        => ToSample (Proxy '(Plain, ( x ': x1 ': xs)), (r,rs))
-                    (Proxy '(Plain, ( x ': x1 ': xs)), (r',rs'))
+        => ToSample (Tagged '(Plain, ( x ': x1 ': xs)) (r ,rs ))
+                    (Tagged '(Plain, ( x ': x1 ': xs)) (r',rs'))
   where
-    toSample _  = fmap (Proxy :: Proxy '(Plain, ( x ': x1 ': xs)),)
-                $ (,) <$> sv <*> sxs
+    toSample _  = fmap Tagged $ (,) <$> sv <*> sxs
       where
-        sv  = fmap snd $ toSample (Proxy :: Proxy (Proxy '(Plain, x), r))
-        sxs = fmap snd $ toSample (Proxy :: Proxy (Proxy '(Plain, x1 ': xs), rs))
+        sv  = fmap untag $ toSample (Proxy :: Proxy (Tagged '(Plain, x) r))
+        sxs = fmap untag $ toSample (Proxy :: Proxy (Tagged '(Plain, x1 ': xs) rs))
 
-instance (ToSample (Proxy '(Plain, xs), r) (Proxy '(Plain, xs), r')
+instance (ToSample (Tagged '(Plain, xs) r) (Tagged '(Plain, xs) r')
         , Rep Plain xs r
         )
-        => ToSample (Proxy '(Plain, xs), [r]) (Proxy '(Plain, xs), [r'])
+        => ToSample (Tagged '(Plain, xs) [r]) (Tagged '(Plain, xs) [r'])
   where
     toSample _ = fmap (fmap (:[]))
-            $ toSample (Proxy :: Proxy (Proxy '(Plain, xs), r))
-
+            $ toSample (Proxy :: Proxy (Tagged '(Plain, xs) r))
+-- -}

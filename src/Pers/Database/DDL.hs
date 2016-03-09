@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+
+-- {-# LANGUAGE UndecidableSuperClasses #-}
 module Pers.Database.DDL where
 
 import Data.Proxy(Proxy(..))

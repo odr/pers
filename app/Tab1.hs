@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
@@ -13,10 +14,16 @@ import GHC.Prim(Proxy#, proxy#)
 import GHC.TypeLits(Symbol)
 import Data.Int(Int64)
 import qualified Data.Text as T
-import Lens.Micro(Lens') -- (&), (.~), (^.))
+import Lens.Micro(Lens', (&), (.~), (^.))
+import Control.Monad.Catch(catch, SomeException)
+import Control.Monad.IO.Class(MonadIO(..))
 
 import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
 import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
+import Pers.Database.DML -- (DML(..),Cond(..),InsAutoPK(..),sel)
+import Pers.Database.Sqlite.Sqlite(Sqlite)
+import Pers.Servant.Servant
+import Pers.Servant.Simple
 
 type Rec1 = '["id":::Int64,"name":::T.Text,"val":::Maybe Double
              ,"x":::Int64, "z":::T.Text, "y"::: Maybe T.Text
@@ -56,15 +63,61 @@ pId = Proxy :: Proxy '["id"]
 pVal = Proxy :: Proxy '["val"]
 pIdName = Proxy :: Proxy '["id","name"]
 
-type Rec2 = '["id":::Int64,"name":::T.Text,"val":::Double,"tab1_id":::Int64]
-type Tab2 = TableDef "tab2" Rec2 '["id"] '[ '["name"]]
-                    '[ '["tab1_id":::"id"]:::("tab1":::Ref)]
-pTab2 = Proxy :: Proxy '(Plain,Tab2)
-pTab2' = Proxy :: Proxy Tab2
+createTab1 :: SessionMonad Sqlite IO ()
+createTab1 = do
+    catch (dropTable pTab1') (\(_::SomeException) -> return ())
+    createTable pTab1'
 
-type Rec3 = ["t1_id":::Int64,"t2_id":::Int64]
-type Tab3 = TableDef "tab3" Rec3 '["t1_id","t2_id"] '[]
-       '[ '["t1_id":::"id"]:::("tab1":::Parent)
-        , '["t2_id":::"id"]:::("tab2":::Parent)
-        ]
-pTab3' = Proxy :: Proxy Tab3
+    step1
+    step2
+    step3
+  where
+    step1 = do
+        ins pTab1 [ rec1
+                  , rec2
+                  , rec1 & lensIdName .~ (3,("odr",()))
+                  , rec1 & lensIdName .~ (4,("elena",()))
+                  , rec2 & lensIdName .~ ((5,).("text4",) $ ())
+                  ]
+        insAuto pTab1 [("text auto 1",).(Just 1.1,).(7,).("auto",).(Just "note",).r0 {-  -} $ ()]
+        -- {-
+        del pTab1 (Equal pId (1,()))
+            >>= liftIO . print
+        del pTab1 (Equal pId (1,()))
+            >>= liftIO . print
+        ins pTab1 [rec1]
+        upd pTab1   [ rec1
+                    & (recLens' (Proxy :: Proxy '(Plain,Rec1,'["name","_2"])))
+                    .~ (("updated!",).(100500,) $ ())
+                    ]
+        -- -}
+        insAuto pTab1 [("text auto 2",).(Just 2.1,).(10,).("test",).(Just "note2",).r0 {- -} $ ()]
+            >>= liftIO . print
+        sel pTab1 CondTrue >>= liftIO . mapM_ print
+        return ()
+    -- {-
+    step2 = do
+        sel pTab1 (Equal pIdName (rec1 ^. lensIdName)) >>= liftIO . mapM_ print
+        sel pTab1 (Equal (pNRec pRec1) rec2) >>= liftIO . mapM_ print
+        del pTab1 $ Equal pId (2,())
+        sel pTab1 (Great pVal (Just 2,())) >>= liftIO . mapM_ print
+        sel pTab1 (And [ Great pVal (Just 2,())
+                       , Least pId  (7,())
+                       ])
+            >>= liftIO . mapM_ print
+    -- -}
+    -- {-
+    step3 = do
+        sel pTab1 (Null pVal) >>= liftIO . mapM_ print
+        sel pTab1 (NotNull pVal) >>= liftIO . mapM_ print
+        sel pTab1 (Not $ NotNull pVal) >>= liftIO . mapM_ print
+        selProj (Proxy :: PTab1Sel '["id","val","z" ]) (Not $ NotNull pVal)
+            >>= liftIO . mapM_ print
+        sel pTab1 (Not $ NotNull pVal)
+            >>= liftIO . mapM_ print
+        return ()
+    -- -}
+
+type Tab1API = PersAPI' Plain SimpleHtml Sqlite '[ServData Plain Tab1]
+serverTab1 = persServerSimple (proxy# :: Proxy# Plain)
+                (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy '[ServData Plain Tab1])

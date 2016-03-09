@@ -32,7 +32,7 @@ import Data.Aeson.Types(Parser)
 import Control.Monad(mzero)
 import qualified Data.HashMap.Strict as HM
 import Data.Tagged
-import Data.Promotion.Prelude.List(type (:++))
+-- import Data.Promotion.Prelude.List(type (:++))
 -- import Data.Singletons.Prelude
 -- import Lucid
 
@@ -72,7 +72,9 @@ class (Rep rep b br, Rep rep a ar)
   where
     recLens :: Proxy# '(rep,b,a) -> Lens' br ar
 
-instance    ( RecLensB (a==b) rep (b ': bs) '[a] br ar
+instance    ( Rep rep (b ': bs) br
+            , Rep rep '[a] ar
+            , RecLensB (a==b) rep (b ': bs) '[a] br ar
             )
             => RecLens rep (b ': bs) (a ': '[]) br ar
   where
@@ -166,6 +168,10 @@ type family ProjNames  (a :: [(k,*)]) (b :: [k]) :: [(k,*)] where
     ProjNames xs '[c] = '[ProjName xs c]
     ProjNames xs (y ': ys) = ProjName xs y ': ProjNames xs ys
 
+type family (:++) (a::[k]) (b::[k]) ::[k] where
+    '[] :++ a       = a
+    (a ': as) :++ b = a ': (as :++ b)
+
 type DataKeyDef a pk = MinusNames a pk :++ ProjNames a pk
 
 type family ProjName  (a :: [(k,*)]) (b :: k) where
@@ -173,6 +179,10 @@ type family ProjName  (a :: [(k,*)]) (b :: k) where
     ProjName ( '(a,b) ': xs ) c = ProjName xs c
 
 ------------ Names ---------------
+type family CheckList (f :: k -> Constraint) (x :: [k]) :: Constraint where
+    CheckList f '[] = ()
+    CheckList f (x ': xs) = (f x, CheckList f xs)
+
 class Names (x :: [Symbol]) where
     symbols :: Proxy# x -> [SomeSymbol]
     names   :: Proxy# x -> [String]
@@ -207,49 +217,48 @@ instance    ( KnownSymbol n
         = ((T.pack $ symbolVal' (proxy# :: Proxy# n),  toJSON v) :)
         . toPairs (Tagged vs :: Tagged '(Plain, nvs) vr)
 
-instance FromJSON (Proxy '(Plain,'[]), ())
+instance FromJSON (Tagged '(Plain,'[]) ())
   where
     parseJSON (Object v)
-        | HM.null v = return (Proxy :: Proxy '(Plain,'[]), ())
+        | HM.null v = return (Tagged () :: Tagged '(Plain,'[]) ())
         | otherwise = mzero
     parseJSON _     = mzero
 
 instance    ( KnownSymbol n
             , FromJSON v
-            , FromJSON (Proxy '(Plain, nvs), vr)
+            , FromJSON (Tagged '(Plain, nvs) vr)
             )
-            => FromJSON (Proxy '(Plain, ((n ::: v) ': nvs)), (v,vr))
+            => FromJSON (Tagged '(Plain, ((n ::: v) ': nvs)) (v,vr))
   where
     parseJSON (Object hm) = do
-        (_ :: Proxy '(Plain, nvs), rest::vr) <- parseJSON (Object hm')
+        (Tagged rest :: Tagged '(Plain, nvs) vr) <- parseJSON (Object hm')
 
-        fmap ( (Proxy :: Proxy '(Plain, ((n ::: v) ': nvs)),)
-             . (,rest)
-             ) $ hm .: name
+        -- fmap ( (Proxy :: Proxy '(Plain, ((n ::: v) ': nvs)),)
+        fmap (Tagged . (,rest)) $ hm .: name
       where
         name = T.pack (symbolVal' (proxy# :: Proxy# n))
         hm' = HM.delete name hm
 
-instance (ToPairs '(rep, a) (x,y)) => ToJSON (Proxy '(rep,a), (x,y)) where
-    toJSON (_,x)
-        = object $ toPairs (Tagged x :: Tagged '(rep,a) (x,y)) []
+-- (x,y) чтобы не перекрываться с [x]
+instance (ToPairs '(Plain, a) (x,y)) => ToJSON (Tagged '(Plain,a) (x,y)) where
+    toJSON x = object $ toPairs x []
 
-instance (ToJSON x) => ToJSON (Tagged r x) where
-    toJSON = toJSON . untag
-instance (FromJSON x) => FromJSON (Tagged r x) where
-    parseJSON = fmap Tagged . parseJSON
-instance (ToJSON (Proxy x, y)) => ToJSON (Proxy x, Tagged r y) where
-    toJSON = toJSON . fmap untag
-instance (FromJSON (Proxy x, y)) => FromJSON (Proxy x, Tagged r y) where
-    parseJSON = fmap (fmap Tagged) . parseJSON
+-- instance (ToJSON x) => ToJSON (Tagged r x) where
+--     toJSON = toJSON . untag
+-- instance (FromJSON x) => FromJSON (Tagged r x) where
+--     parseJSON = fmap Tagged . parseJSON
+-- instance (ToJSON (Proxy x, y)) => ToJSON (Proxy x, Tagged r y) where
+--     toJSON = toJSON . fmap untag
+-- instance (FromJSON (Proxy x, y)) => FromJSON (Proxy x, Tagged r y) where
+--     parseJSON = fmap (fmap Tagged) . parseJSON
 
-instance (ToJSON (Proxy '(rep,a), ar)) => ToJSON (Proxy '(rep,a), [ar])
+instance ToJSON (Tagged '(Plain,a) ar) => ToJSON (Tagged '(Plain,a) [ar])
   where
-    toJSON (p,xs) = toJSON $ map (p,) xs
+    toJSON = toJSON . map (Tagged :: ar -> Tagged '(Plain,a) ar) . untag
 
-instance (FromJSON (Proxy '(rep,a), ar)) => FromJSON (Proxy '(rep,a), [ar])
+instance FromJSON (Tagged '(Plain,a) ar) => FromJSON (Tagged '(Plain,a) [ar])
   where
     parseJSON v
-        = fmap ((Proxy :: Proxy '(rep,a),) . map snd)
-            (parseJSON v :: Parser [(Proxy '(rep,a), ar)])
----------------------------------------
+        = fmap ((Tagged :: x -> Tagged '(Plain,a) x) . map untag)
+            (parseJSON v :: Parser [(Tagged '(Plain,a) ar)])
+--------------------------------------
