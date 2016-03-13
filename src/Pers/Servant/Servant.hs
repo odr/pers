@@ -30,6 +30,9 @@ import qualified Data.ByteString.Lazy as BL
 import GHC.TypeLits(Symbol(..), KnownSymbol, SomeSymbol(..), symbolVal', symbolVal)
 import Data.Type.Bool
 import Data.Typeable
+import Data.Maybe(listToMaybe)
+import Data.Bifunctor(bimap)
+import Control.Applicative(liftA2)
 
 import Pers.Types
 import Pers.Database.DDL
@@ -49,8 +52,10 @@ class   ( TableLike a
         , Rep rep (Key a) kr
         , Rep rep (DataRecord a) dr
         )
-        => PersServant (rep::R) opt back a ar kr dr
+        => PersServant (rep::R) (opt:: *) (back:: *) (a::DataDef *) (ar:: *) (kr:: *) (dr:: *)
                 | rep a -> ar, rep a -> kr, rep a -> dr where
+    type PersListAPI rep opt back a ar kr dr
+    type PersRecAPI rep opt back a ar kr dr
     type PersAPI rep opt back a ar kr dr
     persServer :: Proxy# rep -> Proxy# opt -> Proxy# back -> Proxy '(a,ar,kr,dr)
         -> ServerT (PersAPI rep opt back a ar kr dr) (PersMonad back)
@@ -93,13 +98,31 @@ instance    ( DBOption back
             , RowRepDDL rep back (ProjNames rec pk) kr
             , PersServantIns (IsAutoPKb rep back kr) rep back
                              (TableDef n rec pk uk fk) ar kr dr
+            , Curring rep kr
+            , ServerT   (CaptureN pk kr (Get '[HTML, JSON]
+                            (Tagged opt (Tagged '(rep, rec) (Maybe ar))))
+                        )
+                        (PersMonad back)
+                ~ Curried rep kr
+                        (PersMonad back
+                            (Tagged opt (Tagged '(rep, rec) (Maybe ar)))
+                        )
             )
     => PersServant (rep::R) opt back (TableDef n rec pk uk fk) ar kr dr
   where
+    type PersListAPI rep opt back ((TableDef n rec pk uk fk)) ar kr dr =
+        n :> Get '[HTML,JSON]
+                (Tagged opt (Tagged '(rep, back, TableDef n rec pk uk fk, ar, kr, dr) [ar]))
+    type PersRecAPI rep opt back (TableDef n rec pk uk fk) ar kr dr =
+        n   :> "rec"
+            :> CaptureN pk kr (Get '[HTML,JSON]
+                        (Tagged opt (Tagged '(rep, rec) (Maybe ar))))
     type PersAPI rep opt back (TableDef n rec pk uk fk) ar kr dr =
+        PersListAPI rep opt back (TableDef n rec pk uk fk) ar kr dr
+        :<|>
+        PersRecAPI rep opt back (TableDef n rec pk uk fk) ar kr dr
+        :<|>
         n :> (
-            Get '[HTML,JSON] (Tagged opt (PRecs rep rec ar))
-            :<|>
             PersInsAPI (IsAutoPKb rep back kr) rep back
                         (TableDef n rec pk uk fk) ar kr dr
             :<|>
@@ -109,8 +132,12 @@ instance    ( DBOption back
             ReqBody '[JSON] (PPks rep rec pk kr)
                    :> Delete '[JSON] Int
             )
-    persServer pr _ pb pa =
+    persServer pr po pb pa =
         fmap (Tagged . Tagged) (sel pTab mempty)
+        :<|>
+        curryN pRep
+            ((fmap (Tagged . Tagged . listToMaybe) . sel pTab . Equal pPkN)
+            :: kr -> PersMonad back (Tagged opt (Tagged '(rep, rec) (Maybe ar))))
         :<|>
         persInsServer (proxy# :: Proxy# (IsAutoPKb rep back kr)) pr pb pa
         :<|>
@@ -118,13 +145,21 @@ instance    ( DBOption back
         :<|>
         fmap sum . mapM (del pTab . Equal pPkN) . untag
       where
-        pRec = Proxy :: Proxy '(rep, rec)
-        pTab = Proxy :: Proxy '(rep, TableDef n rec pk uk fk)
-        pPkN  = Proxy :: Proxy pk
-        pPk  = Proxy :: Proxy '(rep, ProjNames rec pk)
+        pRec    = Proxy :: Proxy '(rep, rec)
+        pTab    = Proxy :: Proxy '(rep, TableDef n rec pk uk fk)
+        pPkN    = Proxy :: Proxy pk
+        pPk     = Proxy :: Proxy '(rep, ProjNames rec pk)
+        pRep  = Proxy :: Proxy rep
 
+-- local classes
+type family CaptureN pks ks rest where
+    CaptureN '[pk] (k,()) rest = Capture pk k :> rest
+    CaptureN (p1 ': ps) (k1,k2) rest = Capture p1 k1 :> CaptureN ps k2 rest
 
--- local class
+--type family MkLinkN rep ks ep where
+--    MkLinkN Plain (k,()) ep = k -> MkLink ep
+--    MkLinkN Plain (k,ks) ep = k -> MkLinkN Plain ks ep
+
 class   ( TableLike a
         , Rep rep (RecordDef a) ar
         , Rep rep (Key a) kr
@@ -141,8 +176,12 @@ instance (DML rep back a ar kr dr, IsAutoPK rep back kr, TableLike a)
   where
     type PersInsAPI True rep back a ar kr dr
         = ReqBody '[JSON] (PRecs rep (DataRecord a) dr)
-        :> Post '[JSON] (Tagged '(rep,Key a) [kr])
-    persInsServer _ _ _ _ = fmap Tagged . insAuto pTab . untag
+                :> Post '[JSON] (Tagged '(rep,Key a) [kr])
+        -- :<|>
+        -- "new" :> Get '[HTML] (Tagged opt (Tagged '(rep, (DataRecord a)) (Maybe dr)))
+    persInsServer _ _ _ _
+        =       fmap Tagged . insAuto pTab . untag
+        -- :<|>
       where
         pTab = Proxy :: Proxy '(rep, a)
 
@@ -157,24 +196,6 @@ instance (DML rep back a ar kr dr, TableLike a)
         pTab = Proxy :: Proxy '(rep, a)
 
 --------- ServantDoc ---------------
-{-
-instance (ToSample x) => ToSample (Tagged r x) where
-    toSamples _ = map (fmap Tagged) $ toSamples (Proxy :: Proxy x)
-instance ToSample Int where
-    toSamples _ = [("val",1)]
-instance ToSample Int64 where
-    toSamples _ = [("val",64)]
-instance ToSample Double where
-    toSamples _ = [("val",1.2)]
-instance ToSample Text where
-    toSamples _ = [("E","English"), ("R","Русский"), ("H","עברית"), ("J","日本の")]
-instance ToSample ByteString where
-    toSamples _ = [("ByteString", "Some long text")]
--}
--- {-
---instance (ToSample x x) => ToSample (Tagged r x) (Tagged r x) where
---    toSample _ = fmap Tagged $ toSample (Proxy :: Proxy x)
-
 -- Надо делать спец типы и их для разных БД адаптировать и для документации
 instance ToSample () () where
     toSample _ = Nothing
@@ -198,20 +219,31 @@ instance ToSample ByteString ByteString where
     toSample _ = Just "Some long text"
 instance ToSample [ByteString] [ByteString] where
     toSample _ = Just ["Some long text", "More and more..."]
-instance (ToSample a b) => ToSample (Maybe a) (Maybe b) where
-    toSample _ = Just $ toSample (Proxy :: Proxy a)
 
-instance (ToSample v v')
-    => ToSample (Tagged '(Plain, '(n,v)) v)
-                (Tagged '(Plain, '(n,v)) v')
+instance ToSample (Tagged '(Plain, '(n,Int64)) Int64)
+                  (Tagged '(Plain, '(n,Int64)) Int64)
   where
-    toSample _  = fmap Tagged $ toSample (Proxy :: Proxy v)
+    toSample = fmap Tagged . toSample . fmap untag
+instance ToSample (Tagged '(Plain, '(n,Double)) Double)
+                  (Tagged '(Plain, '(n,Double)) Double)
+  where
+    toSample = fmap Tagged . toSample . fmap untag
+instance ToSample (Tagged '(Plain, '(n,T.Text)) T.Text)
+                  (Tagged '(Plain, '(n,T.Text)) T.Text)
+  where
+    toSample = fmap Tagged . toSample . fmap untag
+
+instance ToSample t t =>
+           ToSample (Tagged '(Plain, '(n,Maybe t)) t)
+                    (Tagged '(Plain, '(n,Maybe t)) t)
+  where
+    toSample = fmap Tagged . toSample . fmap untag
 
 instance (ToSample v v')
     => ToSample (Tagged '(Plain, '[ '(n,v)]) (v ,()))
                 (Tagged '(Plain, '[ '(n,v)]) (v',()))
   where
-    toSample _  = fmap (Tagged . (,())) $ toSample (Proxy :: Proxy v)
+    toSample = fmap (Tagged . (,())) . toSample . fmap (fst . untag)
 
 instance (Rep Plain (x1 ': xs) rs
         , Rep Plain '[x] (r,())
@@ -231,6 +263,68 @@ instance (ToSample (Tagged '(Plain, xs) r) (Tagged '(Plain, xs) r')
         )
         => ToSample (Tagged '(Plain, xs) [r]) (Tagged '(Plain, xs) [r'])
   where
-    toSample _ = fmap (fmap (:[]))
-            $ toSample (Proxy :: Proxy (Tagged '(Plain, xs) r))
--- -}
+    toSample = fmap (fmap (:[])) . toSample . fmap (fmap head)
+
+instance (ToSample (Tagged '(Plain,b,xs,ar,kr,dr) r)
+                   (Tagged '(Plain,b,xs,ar,kr,dr) r')
+        , Rep Plain xs r
+        )
+        => ToSample (Tagged '(Plain,b,xs,ar,kr,dr) [r])
+                    (Tagged '(Plain,b,xs,ar,kr,dr) [r'])
+  where
+    toSample = fmap (fmap (:[])) . toSample . fmap (fmap head)
+
+instance ToSample v v' => ToSample (Maybe v) (Maybe v') where
+    toSamples _ =
+         [ ("Found:", maybe Nothing Just $ toSample (Proxy :: Proxy v))
+         , ("Not found:", Nothing)
+         ]
+
+instance ToSample (Tagged '(Plain, x) r) (Tagged '(Plain, x) r')
+    =>   ToSample (Tagged '(Plain, x) (Maybe r)) (Tagged '(Plain, x) (Maybe r'))
+  where
+    toSamples _ =
+        [ ("Found:", maybe (Tagged Nothing) (retag . fmap Just)
+                        $ toSample (Proxy :: Proxy (Tagged '(Plain, x) r)))
+        , ("Not found:", Tagged Nothing)
+        ]
+
+instance ToSample (Tagged '(rep, r) v) (Tagged '(rep, r) v')
+    => ToSample (Tagged '(rep, TableDef n r p u f) v)
+                (Tagged '(rep, TableDef n r p u f) v')
+  where
+    toSample
+        = fmap retag
+        . (toSample :: Proxy (Tagged '(rep, r) v) -> Maybe (Tagged '(rep, r) v'))
+        . fmap retag
+
+instance ToSample (Tagged '(rep, r) v) (Tagged '(rep, r) v')
+    => ToSample (Tagged '(rep,b,TableDef n r p u f,ar,kr,dr) v)
+                (Tagged '(rep,b,TableDef n r p u f,ar,kr,dr) v')
+  where
+    toSample
+        = fmap retag
+        . (toSample :: Proxy (Tagged '(rep, r) v) -> Maybe (Tagged '(rep, r) v'))
+        . fmap retag
+
+----------------------------------------------------------------------
+
+instance (FromText x) => FromText (Maybe x)
+  where
+    fromText = Just . fromText
+
+instance (FromText x) => FromText (x,())
+  where
+    fromText = fmap (,()) . fromText
+
+instance (FromText x, FromText (y,z)) => FromText (x,(y,z))
+  where
+    fromText = uncurry (liftA2 (,)) . bimap fromText fromText . T.break (=='_')
+
+instance (ToText x) => ToText (Maybe x)
+  where
+    toText = maybe "" toText
+
+instance (ToText x) => ToText (x, ())
+  where
+    toText = toText . fst

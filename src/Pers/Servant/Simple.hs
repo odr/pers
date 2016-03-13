@@ -10,6 +10,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Pers.Servant.Simple where
 import Lucid
 import Data.Int(Int64)
@@ -20,6 +21,8 @@ import Servant.HTML.Lucid -- (HTML)
 import Data.Aeson(ToJSON(..),FromJSON(..))
 import qualified Data.Text as T
 import Data.Tagged
+import GHC.TypeLits(Symbol, KnownSymbol, symbolVal')
+import Lens.Micro
 
 import Pers.Types
 import Pers.Database.DDL
@@ -57,10 +60,10 @@ instance ToHtml (Simple T.Text) where
     toHtmlRaw = toHtmlRaw . untag
 
 instance (ToHtml (Simple a)) => ToHtml (Simple (Maybe a)) where
-    toHtml    = maybe (toHtml "")    (toHtml    . toSimple) . untag
-    toHtmlRaw = maybe (toHtmlRaw "") (toHtmlRaw . toSimple) . untag
+    toHtml    = maybe (toHtml (""::T.Text))    (toHtml    . toSimple) . untag
+    toHtmlRaw = maybe (toHtmlRaw (""::T.Text)) (toHtmlRaw . toSimple) . untag
 
--- HTML serialization of a single row
+-- HTML form of a single row
 instance ToHtml (Simple ()) where
     toHtml    _ = return ()
     toHtmlRaw _ = return ()
@@ -76,18 +79,87 @@ instance (ToHtml (Simple v1), ToHtml (Simple (v2,vs)))
     toHtml    (Tagged (v,vs)) = td_ (toHtml    $ toSimple v) >> toHtml    (toSimple vs)
     toHtmlRaw (Tagged (v,vs)) = td_ (toHtmlRaw $ toSimple v) >> toHtmlRaw (toSimple vs)
 
--- HTML serialization of a list of rows
-instance    ( ToHtml (Simple x)
-            , Names (NRec a)
-            , Rep rep a x
+-- HTML form of a list of rows
+instance    ( ToHtml (Simple ar)
+            , Names (NRec (RecordDef a))
+            , Rep rep (RecordDef a) ar
+            , RecLens rep (RecordDef a) (Key a) ar kr
+            , IsElem (PersRecAPI rep SimpleHtml b a ar kr dr)
+                     (PersAPI rep SimpleHtml b a ar kr dr)
+            , HasLink (PersRecAPI rep SimpleHtml b a ar kr dr)
+            , Curring rep kr
+            , Curried rep kr URI ~ MkLink (PersRecAPI rep SimpleHtml b a ar kr dr)
+            -- , kr ~ UnCur rep (VRec' (ProjNames rec0 pk0))
             )
-            => ToHtml (Simple (Tagged '(rep,a) [x]))
+    => ToHtml
+        (Simple
+            (Tagged '(rep,(b:: *),(a::DataDef *),ar,(kr:: *),(dr:: *)) [ar])
+        )
   where
-    toHtml (Tagged (Tagged xs))
-        = table_ $ do
-            tr_ $ foldMap (th_ . toHtml) $ names (proxy# :: Proxy# (NRec a))
-            foldMap (tr_ . toHtml . toSimple) xs
-    toHtmlRaw (Tagged (Tagged xs))
-        = table_ $ do
-            tr_ $ foldMap (th_ . toHtmlRaw) $ names (proxy# :: Proxy# (NRec a))
-            foldMap (tr_ . toHtmlRaw . toSimple) xs
+    toHtml (Tagged (Tagged xs)) = do
+        termWith "script" [src_ "static/jq.js"] ""
+        termWith "script" [src_ "static/api.js"] ""
+        table_ $ do
+            tr_ $ do
+                th_ $ label_ "=>"
+                foldMap (th_ . toHtml)
+                    $ names (proxy# :: Proxy# (NRec (RecordDef a)))
+            foldMap (\x -> tr_ $ do
+                    td_ $ a_ [href_ $ ref x, target_ "blank"] $ button_ "=>"
+                    -- td_ $ button_ [id_ "e", onclick_ "gettab1()"] "=>"
+                    toHtml $ toSimple x
+                ) xs
+      where
+        lpk = lensPk (Proxy :: Proxy '(rep,a))
+        vpk rec = rec ^. lpk :: kr
+        api = Proxy :: Proxy (PersAPI rep SimpleHtml (b:: *) a ar kr dr)
+        recApi = Proxy :: Proxy (PersRecAPI rep SimpleHtml b a ar kr dr)
+        ref = T.pack . show . lnk
+        lnk rec = (uncurryN pRep $ safeLink api recApi) $ vpk rec :: URI
+        pRep  = Proxy :: Proxy rep
+
+
+    toHtmlRaw = toHtml
+
+-- HTML form of a record
+instance ToHtml (Simple (Tagged '(Plain, b, '[]) ()))
+  where
+    toHtml _ = return ()
+    toHtmlRaw _ = return ()
+
+instance (ToText x, ToHtml (Simple (Tagged '(Plain, False, rs) xs)),
+        KnownSymbol r)
+        => ToHtml (Simple (Tagged '(Plain, False, '(r,t) ': rs) (x,xs)))
+  where
+    toHtml (Tagged (Tagged (x,xs))) = do
+        termWith "script" [src_ "static/jq.js"] ""
+        termWith "script" [src_ "static/api.js"] ""
+        tr_ $ do
+            td_ $ toHtml $ toSimple $ T.pack $ symbolVal' (proxy# :: Proxy# r)
+            td_ $ input_ [type_ "text", value_ $ toText x]
+        toHtml $ toSimple (Tagged xs :: Tagged '(Plain, False, rs) xs)
+    toHtmlRaw = toHtml
+
+instance ToHtml (Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
+        => ToHtml (Simple (Tagged '(Plain, r ': rs) (x,xs)))
+  where
+    toHtml zs = table_ $ toHtml
+        (fmap retag zs :: Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
+    toHtmlRaw zs = table_$ toHtmlRaw
+        (fmap retag zs :: Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
+
+instance ToHtml (Simple (Tagged '(Plain, r ': rs) (x,xs)))
+        => ToHtml (Simple (Tagged '(Plain, r ': rs) (Maybe (x,xs))))
+  where
+    toHtml
+        = maybe (p_ "No data found!")
+                ( toHtml . toSimple
+                . (Tagged :: (x,xs) -> Tagged '(Plain, r ': rs) (x,xs))
+                )
+        . untag . untag
+    toHtmlRaw
+        = maybe (p_ "No data found!")
+                ( toHtmlRaw . toSimple
+                . (Tagged :: (x,xs) -> Tagged '(Plain, r ': rs) (x,xs))
+                )
+        . untag . untag

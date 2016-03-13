@@ -35,6 +35,7 @@ import Data.Type.Equality((:~:)(..), castWith)
 import Lens.Micro(Lens', (^.))
 import Lens.Micro.Type(Getting)
 import GHC.Exts(Constraint)
+import Data.Tagged
 
 import Pers.Types
 
@@ -56,6 +57,14 @@ data DataDef k
                 , uk    :: [[Symbol]]
                 , fk    :: [([(Symbol,Symbol)],(Symbol,RefType))]
                 }
+
+instance (ToPairs '(rep, r) v) => ToPairs '(rep, TableDef n r p u f) v
+  where
+    toPairs = toPairs
+            . (retag :: Tagged '(rep, TableDef n r p u f) v
+                     -> Tagged '(rep, r) v
+              )
+
 
 
 class TableLike (a::k) where
@@ -184,6 +193,8 @@ rowDb :: (RowRepDDL rep backend a ar)
         => Proxy# '(rep, backend) -> Proxy a -> ar -> [FieldDB backend]
 rowDb prb pa v = toRowDb prb pa v []
 
+-- lensPk ::(Functor f, RecLens rep (RecordDef a) (Key a) br ar)
+--         => Proxy ('(rep,a)) -> (ar -> f ar) -> br -> f br
 lensPk (_::Proxy '(rep,a))
     = recLens (proxy#::Proxy#  '( rep, RecordDef a, Key a ))
 lensData (_::Proxy '(rep,a))

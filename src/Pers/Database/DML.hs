@@ -43,7 +43,7 @@ class   ( TableLike a
         , Rep rep (Key a) kr
         , Rep rep (DataRecord a) dr
         )
-        => DML (rep::R) back a ar kr dr
+        => DML (rep::R) (back:: *) (a::DataDef *) (ar:: *) (kr:: *) (dr:: *)
             | rep a -> ar, rep a -> kr, rep a -> dr
   where
     -- | Insert the list of values into database.

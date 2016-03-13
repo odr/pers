@@ -5,10 +5,10 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- {-# LANGUAGE OverlappingInstances #-}
--- {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Main where
 
+import Control.Concurrent(forkIO)
 import Lens.Micro(Lens', (&), (.~), (^.))
 import Data.Proxy(Proxy(..))
 import GHC.Prim(Proxy#, proxy#)
@@ -30,6 +30,8 @@ import           Data.Text.Lazy.Encoding (encodeUtf8)
 import           Network.HTTP.Types
 import Servant -- (serve, (:~>)(..), type (:~>), ServantErr, enter)
 import Servant.Docs
+import Servant.JQuery
+import qualified Language.Javascript.JQuery as JQ
 
 import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
 import Pers.Database.DDL -- (TableDef, runSession, DDL(..))
@@ -61,7 +63,11 @@ sql = do
 
 main :: IO ()
 main = do
-    sql
+    forkIO sql
+    site
+
+site = do
+    writeJSFiles
     run 8081 app
 
 -- type Tabs = ServDatas Plain '[Tab1, Tab2, Tab3]
@@ -71,7 +77,10 @@ type MyAPI = Tab1API :<|> Tab2API :<|> Tab3API
 -- PersAPI' Plain SimpleHtml Sqlite Tabs
 myAPI = Proxy :: Proxy MyAPI
 
-type DocsAPI = MyAPI :<|> "doc.md" :> Raw
+type DocsAPI = MyAPI
+            :<|> "doc.md" :> Raw
+            :<|> "api.js" :> Raw
+            :<|> "static" :> Raw
 api :: Proxy DocsAPI
 api = Proxy
 
@@ -83,10 +92,14 @@ runTestDB :: PersMonad Sqlite :~> EitherT ServantErr IO
 runTestDB = Nat $ runSession sqlite "test.db"
 
 serverD :: Server DocsAPI
-serverD = server :<|> serveDocs
+serverD = server :<|> serveDocs :<|> apiJS
+        :<|> serveDirectory "js"
   where serveDocs _ respond =
-          respond $ responseLBS ok200 [plain] docsBS
+            respond $ responseLBS ok200 [plain] docsBS
         plain = ("Content-Type", "text/plain")
+        apiJS _ respond =
+            respond $ responseLBS ok200 [plain] $ encodeUtf8 $ pack apiJsStr
+apiJsStr = mconcat [jsForAPI pTab1API, jsForAPI pTab2API, jsForAPI pTab3API]
 
 server  =       enter runTestDB serverTab1
         :<|>    enter runTestDB serverTab2
@@ -103,3 +116,18 @@ docsBS = encodeUtf8
        $ docsWithIntros [intro] myAPI
   where intro = DocIntro "Welcome"
                     ["This is our super webservice's API.", "Enjoy!"]
+
+instance ToCapture (Capture "id" Int64) where
+  toCapture _ = DocCapture "id" "identity of record"
+
+instance ToCapture (Capture "t1_id" Int64) where
+  toCapture _ = DocCapture "t1_id" "identity of record in table t1"
+
+instance ToCapture (Capture "t2_id" Int64) where
+  toCapture _ = DocCapture "t2_id" "identity of record in table t2"
+
+writeJSFiles :: IO ()
+writeJSFiles = do
+  writeFile "js/api.js" apiJsStr
+  jq <- JQ.file >>= readFile
+  writeFile "js/jq.js" jq

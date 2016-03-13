@@ -15,11 +15,11 @@
 -- {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ConstraintKinds #-}
 -- {-# LANGUAGE OverlappingInstances #-}
--- {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 module Pers.Types
     where
 
-import GHC.TypeLits(Symbol, KnownSymbol, symbolVal', SomeSymbol(..))
+import GHC.TypeLits -- (Symbol, KnownSymbol, symbolVal', SomeSymbol(..), Nat)
 import GHC.Prim(Proxy#, proxy#)
 import Data.Proxy(Proxy(..))
 import Data.Type.Equality(type (==))
@@ -32,6 +32,7 @@ import Data.Aeson.Types(Parser)
 import Control.Monad(mzero)
 import qualified Data.HashMap.Strict as HM
 import Data.Tagged
+import Data.Maybe(maybeToList, listToMaybe)
 -- import Data.Promotion.Prelude.List(type (:++))
 -- import Data.Singletons.Prelude
 -- import Lucid
@@ -43,6 +44,43 @@ infixl 9 :::
 -- | Kind for type of representation. Constructors are types.
 data R
     = Plain -- ^ Type to define simple record representation as tuple (a,).(b,).(c,)....(z,) $ ()
+proxyPlain = Proxy :: Proxy Plain
+-- | Generalized Curry/Uncurry
+-- class Curring (r::R) (ts::[*]) where
+--     type Curried r ts c
+--     type UnCur r ts
+--     curryN :: Proxy '(r,ts) -> (UnCur r ts -> c) -> Curried r ts c
+--     uncurryN :: Proxy '(r,ts) -> Curried r ts c -> UnCur r ts -> c
+--
+-- instance Curring Plain '[t] where
+--     type Curried Plain '[t] c = t -> c
+--     type UnCur Plain '[t] = (t,())
+--     curryN _ f t = f (t,())
+--     uncurryN _ f (t,()) = f t
+--
+-- instance Curring Plain (t2 ': ts) => Curring Plain (t1 ': t2 ': ts) where
+--     type Curried Plain (t1 ': t2 ': ts) c = t1 -> Curried Plain (t2 ': ts) c
+--     type UnCur Plain (t1 ': t2 ': ts) = (t1, UnCur Plain (t2 ': ts))
+--     curryN _ f = curryN (Proxy :: Proxy '(Plain, t2 ': ts)) . curry f
+--     uncurryN _ f (t1,ts) = uncurryN (Proxy :: Proxy '(Plain, t2 ': ts)) (f t1) ts
+--
+class Curring (r::R) (ts :: *) where
+    type Curried r ts c
+    -- type UnCur r ts
+    curryN :: Proxy r -> (ts -> c) -> Curried r ts c
+    uncurryN :: Proxy r -> Curried r ts c -> ts -> c
+
+instance Curring Plain (t,()) where
+    type Curried Plain (t,()) c = t -> c
+    -- type UnCur Plain '[t] = (t,())
+    curryN _ f t = f (t,())
+    uncurryN _ f (t,()) = f t
+
+instance Curring Plain (t2,ts) => Curring Plain (t1,(t2,ts)) where
+    type Curried Plain (t1,(t2,ts)) c = t1 -> Curried Plain (t2,ts) c
+    -- type UnCur Plain (t1 ': t2 ': ts) = (t1, UnCur Plain (t2 ': ts))
+    curryN _ f = curryN proxyPlain . curry f
+    uncurryN _ f (t1,ts) = uncurryN proxyPlain (f t1) ts
 
 -- | Representation of singleton
 class Single (rep::R) where
@@ -61,9 +99,13 @@ type family VRec (rep::R) (a :: [(k,*)]) :: * where
     VRec Plain '[ '(a,b)]       = (b,())
     VRec Plain ('(a,b) ': xs)   = (b, VRec Plain xs)
 
-type family VRecs (rep::R) (a :: [[(k,*)]]) :: [*] where
-    VRecs rep '[]       = '[]
-    VRecs rep (x ': xs) = VRec rep x ': VRecs rep xs
+type family VRec' (a :: [(k,*)]) :: [*] where
+    VRec' '[]       = '[]
+    VRec' ('(a,b) ': xs) = b ': VRec' xs
+
+type family VRec'' (rep :: R) (a :: *) :: [*] where
+    VRec'' Plain () = '[]
+    VRec'' Plain (a,b) = a ': VRec'' Plain b
 
 -------------------- Lenses --------------------------------
 class (Rep rep b br, Rep rep a ar)
@@ -240,8 +282,14 @@ instance    ( KnownSymbol n
         hm' = HM.delete name hm
 
 -- (x,y) чтобы не перекрываться с [x]
-instance (ToPairs '(Plain, a) (x,y)) => ToJSON (Tagged '(Plain,a) (x,y)) where
-    toJSON x = object $ toPairs x []
+instance ToPairs '(Plain, a) (x,y) => ToJSON (Tagged '(Plain,a) (x,y)) where
+    toJSON = object . flip toPairs []
+instance  ToJSON (Tagged '(Plain,a) (x,y))
+        => ToJSON (Tagged '(Plain,b,a,ar,kr,dr) (x,y)) where
+    toJSON = toJSON
+        . (retag :: Tagged '(Plain,b,a,ar,kr,dr) (x,y)
+                    -> Tagged '(Plain,a) (x,y)
+          )
 
 -- instance (ToJSON x) => ToJSON (Tagged r x) where
 --     toJSON = toJSON . untag
@@ -252,13 +300,24 @@ instance (ToPairs '(Plain, a) (x,y)) => ToJSON (Tagged '(Plain,a) (x,y)) where
 -- instance (FromJSON (Proxy x, y)) => FromJSON (Proxy x, Tagged r y) where
 --     parseJSON = fmap (fmap Tagged) . parseJSON
 
+instance ToJSON (Tagged '(Plain,b,a,ar,kr,dr) ar) => ToJSON (Tagged '(Plain,b,a,ar,kr,dr) [ar])
+  where
+    toJSON = toJSON . sequence
 instance ToJSON (Tagged '(Plain,a) ar) => ToJSON (Tagged '(Plain,a) [ar])
   where
-    toJSON = toJSON . map (Tagged :: ar -> Tagged '(Plain,a) ar) . untag
+    toJSON = toJSON . sequence
 
 instance FromJSON (Tagged '(Plain,a) ar) => FromJSON (Tagged '(Plain,a) [ar])
   where
+    parseJSON v = fmap sequence (parseJSON v :: Parser [(Tagged '(Plain,a) ar)])
+
+instance ToJSON (Tagged '(Plain,a) [ar]) => ToJSON (Tagged '(Plain,a) (Maybe ar))
+  where
+    toJSON = toJSON . fmap maybeToList
+
+instance FromJSON (Tagged '(Plain,a) ar) => FromJSON (Tagged '(Plain,a) (Maybe ar))
+  where
     parseJSON v
-        = fmap ((Tagged :: x -> Tagged '(Plain,a) x) . map untag)
-            (parseJSON v :: Parser [(Tagged '(Plain,a) ar)])
+        = fmap (retag . fmap listToMaybe)
+            (parseJSON v :: Parser (Tagged '(Plain,a) [ar]))
 --------------------------------------

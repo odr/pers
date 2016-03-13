@@ -121,3 +121,5 @@ createTab1 = do
 type Tab1API = PersAPI' Plain SimpleHtml Sqlite '[ServData Plain Tab1]
 serverTab1 = persServerSimple (proxy# :: Proxy# Plain)
                 (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy '[ServData Plain Tab1])
+pTab1API :: Proxy Tab1API
+pTab1API = Proxy
