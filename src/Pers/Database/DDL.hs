@@ -22,7 +22,7 @@ module Pers.Database.DDL where
 import Data.Proxy(Proxy(..))
 import GHC.Prim(Proxy#, proxy#)
 import GHC.TypeLits(Symbol(..), KnownSymbol, symbolVal', SomeSymbol(..))
-import Data.Type.Bool(type (&&), type (||), If)
+import Data.Type.Bool(type (||), If)
 import Data.Typeable(Typeable(..))
 import Data.Default(Default(..))
 import Data.Text.Lazy(Text)
@@ -127,16 +127,6 @@ class FieldDDL backend (a :: *) where
     nullStr _ _ = "NOT NULL"
     toDb        :: Proxy# backend -> a -> FieldDB backend -- ^ value to database type
     fromDb      :: Proxy# backend -> FieldDB backend -> Maybe a -- ^ database type to value
-
--- | Does this type can have default (null) value.
---   True for Maybe and [] but not for String.
-type family HasDef a :: Bool where
-    HasDef (Maybe a) = True
-    HasDef String = False
-    HasDef [a] = True
-    HasDef (a,b) = HasDef a && HasDef b
-    HasDef () = True
-    HasDef a = False
 
 class RowDDL backend (a :: [(Symbol,*)]) where
     -- | String to describe a row for table creation

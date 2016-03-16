@@ -30,7 +30,6 @@ import           Data.Text.Lazy.Encoding (encodeUtf8)
 import           Network.HTTP.Types
 import Servant -- (serve, (:~>)(..), type (:~>), ServantErr, enter)
 import Servant.Docs
-import Servant.JQuery
 import qualified Language.Javascript.JQuery as JQ
 
 import Pers.Types -- ((:::),Rep(Plain),VRec,recLens,pNRec,recLens')
@@ -51,8 +50,6 @@ sql = do
             createTab2
             createTab3
         )
-  where
-
 
 -- TODO обработка ошибок
 -- TODO внешние ключи
@@ -67,47 +64,36 @@ main = do
     site
 
 site = do
-    writeJSFiles
+    forkIO writeJQ
+    mapM_ (forkIO)  [ mkJsAPI pTab1API'
+                    , mkJsAPI pTab2API'
+                    , mkJsAPI pTab3API'
+                    ]
     run 8081 app
 
--- type Tabs = ServDatas Plain '[Tab1, Tab2, Tab3]
--- type Tabs = ServDatas Plain '[Tab3]
-
 type MyAPI = Tab1API :<|> Tab2API :<|> Tab3API
--- PersAPI' Plain SimpleHtml Sqlite Tabs
 myAPI = Proxy :: Proxy MyAPI
 
 type DocsAPI = MyAPI
             :<|> "doc.md" :> Raw
-            :<|> "api.js" :> Raw
             :<|> "static" :> Raw
 api :: Proxy DocsAPI
 api = Proxy
 
 app = serve api serverD
--- app = serve myAPI server
 
--- runTestDB :: PersMonad Sqlite :~> ExceptT ServantErr IO
 runTestDB :: PersMonad Sqlite :~> EitherT ServantErr IO
 runTestDB = Nat $ runSession sqlite "test.db"
 
 serverD :: Server DocsAPI
-serverD = server :<|> serveDocs :<|> apiJS
-        :<|> serveDirectory "js"
+serverD = server :<|> serveDocs :<|> serveDirectory "js"
   where serveDocs _ respond =
             respond $ responseLBS ok200 [plain] docsBS
         plain = ("Content-Type", "text/plain")
-        apiJS _ respond =
-            respond $ responseLBS ok200 [plain] $ encodeUtf8 $ pack apiJsStr
-apiJsStr = mconcat [jsForAPI pTab1API, jsForAPI pTab2API, jsForAPI pTab3API]
 
 server  =       enter runTestDB serverTab1
         :<|>    enter runTestDB serverTab2
         :<|>    enter runTestDB serverTab3
--- server  = enter runTestDB
---         $ persServerSimple  (proxy# :: Proxy# Plain)
---                             (proxy# :: Proxy# Sqlite)
---                             (Proxy  :: Proxy Tabs)
 
 docsBS :: ByteString
 docsBS = encodeUtf8
@@ -126,8 +112,7 @@ instance ToCapture (Capture "t1_id" Int64) where
 instance ToCapture (Capture "t2_id" Int64) where
   toCapture _ = DocCapture "t2_id" "identity of record in table t2"
 
-writeJSFiles :: IO ()
-writeJSFiles = do
-  writeFile "js/api.js" apiJsStr
+writeJQ :: IO ()
+writeJQ = do
   jq <- JQ.file >>= readFile
   writeFile "js/jq.js" jq

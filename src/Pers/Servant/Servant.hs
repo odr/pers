@@ -21,6 +21,7 @@ import Control.Monad.Trans.Either
 import Data.Aeson(ToJSON(..),FromJSON(..), encode)
 import Servant.HTML.Lucid(HTML)
 import Servant.Docs
+import Servant.JQuery
 import Data.Tagged
 import Data.Text(Text)
 import qualified Data.Text as T
@@ -59,6 +60,21 @@ class   ( TableLike a
     type PersAPI rep opt back a ar kr dr
     persServer :: Proxy# rep -> Proxy# opt -> Proxy# back -> Proxy '(a,ar,kr,dr)
         -> ServerT (PersAPI rep opt back a ar kr dr) (PersMonad back)
+
+toPersAPI :: Proxy '(rep, opt, back, '(a, ar, kr, dr))
+        -> Proxy (PersAPI rep opt back a ar kr dr)
+toPersAPI _ = Proxy
+
+mkJsAPI ::  ( HasJQ (PersAPI rep opt back a ar kr dr)
+            , GenerateCode (JQ (PersAPI rep opt back a ar kr dr))
+            , KnownSymbol (TabName a)
+            )
+        => Proxy '(rep, opt, back, '(a, ar, kr, dr)) -> IO ()
+mkJsAPI (ps :: Proxy '(rep, opt, back, '(a, ar, kr, dr)))
+    = writeFile ("js/" ++ sTab ++ "api.js") $ jsForAPI pAPI
+  where
+    pAPI = toPersAPI ps
+    sTab = symbolVal' (proxy# :: Proxy# (TabName a))
 
 class PersServant' (rep::R) opt back (x::[(DataDef *,*,*,*)])
   where
@@ -126,11 +142,9 @@ instance    ( DBOption back
             PersInsAPI (IsAutoPKb rep back kr) rep back
                         (TableDef n rec pk uk fk) ar kr dr
             :<|>
-            ReqBody '[JSON] (PRecs rep rec ar)
-                    :> Put '[JSON] (PPks rep rec pk kr)
+            ReqBody '[JSON] (PRecs rep rec ar) :> Put '[JSON] (PPks rep rec pk kr)
             :<|>
-            ReqBody '[JSON] (PPks rep rec pk kr)
-                   :> Delete '[JSON] Int
+            ReqBody '[JSON] (PPks rep rec pk kr) :> Delete '[JSON] Int
             )
     persServer pr po pb pa =
         fmap (Tagged . Tagged) (sel pTab mempty)

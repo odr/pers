@@ -23,6 +23,7 @@ import GHC.TypeLits -- (Symbol, KnownSymbol, symbolVal', SomeSymbol(..), Nat)
 import GHC.Prim(Proxy#, proxy#)
 import Data.Proxy(Proxy(..))
 import Data.Type.Equality(type (==))
+import Data.Type.Bool(type (&&))
 import Lens.Micro(Lens', (^.), (.~), (&), lens)
 import GHC.Exts(Constraint)
 import qualified Data.Text as T
@@ -45,34 +46,14 @@ infixl 9 :::
 data R
     = Plain -- ^ Type to define simple record representation as tuple (a,).(b,).(c,)....(z,) $ ()
 proxyPlain = Proxy :: Proxy Plain
--- | Generalized Curry/Uncurry
--- class Curring (r::R) (ts::[*]) where
---     type Curried r ts c
---     type UnCur r ts
---     curryN :: Proxy '(r,ts) -> (UnCur r ts -> c) -> Curried r ts c
---     uncurryN :: Proxy '(r,ts) -> Curried r ts c -> UnCur r ts -> c
---
--- instance Curring Plain '[t] where
---     type Curried Plain '[t] c = t -> c
---     type UnCur Plain '[t] = (t,())
---     curryN _ f t = f (t,())
---     uncurryN _ f (t,()) = f t
---
--- instance Curring Plain (t2 ': ts) => Curring Plain (t1 ': t2 ': ts) where
---     type Curried Plain (t1 ': t2 ': ts) c = t1 -> Curried Plain (t2 ': ts) c
---     type UnCur Plain (t1 ': t2 ': ts) = (t1, UnCur Plain (t2 ': ts))
---     curryN _ f = curryN (Proxy :: Proxy '(Plain, t2 ': ts)) . curry f
---     uncurryN _ f (t1,ts) = uncurryN (Proxy :: Proxy '(Plain, t2 ': ts)) (f t1) ts
---
+
 class Curring (r::R) (ts :: *) where
     type Curried r ts c
-    -- type UnCur r ts
     curryN :: Proxy r -> (ts -> c) -> Curried r ts c
     uncurryN :: Proxy r -> Curried r ts c -> ts -> c
 
 instance Curring Plain (t,()) where
     type Curried Plain (t,()) c = t -> c
-    -- type UnCur Plain '[t] = (t,())
     curryN _ f t = f (t,())
     uncurryN _ f (t,()) = f t
 
@@ -321,3 +302,14 @@ instance FromJSON (Tagged '(Plain,a) ar) => FromJSON (Tagged '(Plain,a) (Maybe a
         = fmap (retag . fmap listToMaybe)
             (parseJSON v :: Parser (Tagged '(Plain,a) [ar]))
 --------------------------------------
+
+-- | Does this type can have default (null) value.
+--   True for Maybe and [] but not for String.
+type family HasDef a :: Bool where
+    HasDef (Maybe a) = True
+    HasDef String = False
+    HasDef [a] = True
+    HasDef (a,b) = HasDef a && HasDef b
+    HasDef () = True
+    HasDef a = False
+

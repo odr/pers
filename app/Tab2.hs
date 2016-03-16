@@ -49,3 +49,5 @@ serverTab2 = persServerSimple (proxy# :: Proxy# Plain)
                 (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy '[ServData Plain Tab2])
 pTab2API :: Proxy Tab2API
 pTab2API = Proxy
+pTab2API' :: Proxy '(Plain,SimpleHtml,Sqlite,ServData Plain Tab2)
+pTab2API' = Proxy

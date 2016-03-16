@@ -23,12 +23,13 @@ import qualified Data.Text as T
 import Data.Tagged
 import GHC.TypeLits(Symbol, KnownSymbol, symbolVal')
 import Lens.Micro
+import Servant.Docs
 
 import Pers.Types
 import Pers.Database.DDL
 import Pers.Database.DML
 import Pers.Servant.Servant
-import Servant.Docs
+import Pers.Servant.Input
 
 data SimpleHtml
 
@@ -89,7 +90,6 @@ instance    ( ToHtml (Simple ar)
             , HasLink (PersRecAPI rep SimpleHtml b a ar kr dr)
             , Curring rep kr
             , Curried rep kr URI ~ MkLink (PersRecAPI rep SimpleHtml b a ar kr dr)
-            -- , kr ~ UnCur rep (VRec' (ProjNames rec0 pk0))
             )
     => ToHtml
         (Simple
@@ -97,8 +97,8 @@ instance    ( ToHtml (Simple ar)
         )
   where
     toHtml (Tagged (Tagged xs)) = do
-        termWith "script" [src_ "static/jq.js"] ""
-        termWith "script" [src_ "static/api.js"] ""
+        -- termWith "script" [src_ "static/jq.js"] ""
+        -- termWith "script" [src_ "static/api.js"] ""
         table_ $ do
             tr_ $ do
                 th_ $ label_ "=>"
@@ -127,26 +127,27 @@ instance ToHtml (Simple (Tagged '(Plain, b, '[]) ()))
     toHtml _ = return ()
     toHtmlRaw _ = return ()
 
-instance (ToText x, ToHtml (Simple (Tagged '(Plain, False, rs) xs)),
-        KnownSymbol r)
+instance (ToHtml (Tagged Input x), ToHtml (Simple (Tagged '(Plain, False, rs) xs)),
+        ToHtml (Proxy '(r, HasDef x)))
         => ToHtml (Simple (Tagged '(Plain, False, '(r,t) ': rs) (x,xs)))
   where
     toHtml (Tagged (Tagged (x,xs))) = do
-        termWith "script" [src_ "static/jq.js"] ""
-        termWith "script" [src_ "static/api.js"] ""
+        -- termWith "script" [src_ "static/jq.js"] ""
+        -- termWith "script" [src_ "static/api.js"] ""
         tr_ $ do
-            td_ $ toHtml $ toSimple $ T.pack $ symbolVal' (proxy# :: Proxy# r)
-            td_ $ input_ [type_ "text", value_ $ toText x]
+            td_ $ toHtml (Proxy :: Proxy '(r,HasDef x))
+            td_ $ toHtml $ toInput x
         toHtml $ toSimple (Tagged xs :: Tagged '(Plain, False, rs) xs)
     toHtmlRaw = toHtml
 
 instance ToHtml (Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
         => ToHtml (Simple (Tagged '(Plain, r ': rs) (x,xs)))
   where
-    toHtml zs = table_ $ toHtml
-        (fmap retag zs :: Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
-    toHtmlRaw zs = table_$ toHtmlRaw
-        (fmap retag zs :: Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
+    toHtml zs = do
+        table_ $ toHtml
+            (fmap retag zs :: Simple (Tagged '(Plain, False, r ': rs) (x,xs)))
+        termWith "button" [class_ "btnSave"] "Save"
+    toHtmlRaw = toHtml
 
 instance ToHtml (Simple (Tagged '(Plain, r ': rs) (x,xs)))
         => ToHtml (Simple (Tagged '(Plain, r ': rs) (Maybe (x,xs))))
@@ -157,9 +158,12 @@ instance ToHtml (Simple (Tagged '(Plain, r ': rs) (x,xs)))
                 . (Tagged :: (x,xs) -> Tagged '(Plain, r ': rs) (x,xs))
                 )
         . untag . untag
-    toHtmlRaw
-        = maybe (p_ "No data found!")
-                ( toHtmlRaw . toSimple
-                . (Tagged :: (x,xs) -> Tagged '(Plain, r ': rs) (x,xs))
-                )
-        . untag . untag
+    toHtmlRaw = toHtml
+
+instance KnownSymbol s => ToHtml (Proxy '(s, True)) where
+    toHtml    _ = toHtml    $ toSimple $ T.pack $ symbolVal' (proxy# :: Proxy# s)
+    toHtmlRaw _ = toHtmlRaw $ toSimple $ T.pack $ symbolVal' (proxy# :: Proxy# s)
+
+instance ToHtml (Proxy '(s, True)) => ToHtml (Proxy '(s, False)) where
+    toHtml    _ = toHtml    (Proxy :: Proxy '(s,True)) >> span_ [class_ "rq_ast"] "*"
+    toHtmlRaw _ = toHtmlRaw (Proxy :: Proxy '(s,True)) >> span_ [class_ "rq_ast"] "*"
