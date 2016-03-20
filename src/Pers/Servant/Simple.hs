@@ -37,10 +37,10 @@ type Simple = Tagged SimpleHtml
 toSimple :: a -> Simple a
 toSimple = Tagged
 
-persServerSimple :: PersServant' rep SimpleHtml back x
-    => Proxy# rep -> Proxy# back -> Proxy (x::[(DataDef *,*,*,*)])
-    -> ServerT (PersAPI' rep SimpleHtml back x) (PersMonad back)
-persServerSimple pr = persServer' pr (proxy# :: Proxy# SimpleHtml)
+persServerSimple :: PersServant rep SimpleHtml back a ar kr dr
+    => Proxy# rep -> Proxy# back -> Proxy '(a,ar,kr,dr)
+    -> ServerT (PersAPI rep SimpleHtml back a ar kr dr) (PersMonad back)
+persServerSimple pr = persServer pr (proxy# :: Proxy# SimpleHtml)
 
 instance (ToSample x x) => ToSample (Simple x) (Simple x) where
     toSample _ = fmap Tagged $ toSample (Proxy :: Proxy x)
@@ -97,8 +97,6 @@ instance    ( ToHtml (Simple ar)
         )
   where
     toHtml (Tagged (Tagged xs)) = do
-        -- termWith "script" [src_ "static/jq.js"] ""
-        -- termWith "script" [src_ "static/api.js"] ""
         table_ $ do
             tr_ $ do
                 th_ $ label_ "=>"
@@ -122,21 +120,31 @@ instance    ( ToHtml (Simple ar)
     toHtmlRaw = toHtml
 
 -- HTML form of a record
+instance (ToHtml (Simple (Tagged '(Plain, rec) xs)), KnownSymbol n) =>
+         ToHtml (Simple (Tagged '(Plain, (TableDef n rec pk uk fk)) xs))
+  where
+    toHtml x = do
+        termWith "script" [src_ $ "/static/jq.js"] ""
+        termWith "script" [src_ $ mconcat ["/static/",T.pack sTab,".js"]] ""
+        toHtml (fmap retag x :: Simple (Tagged '(Plain, rec) xs))
+      where
+        sTab = symbolVal' (proxy# :: Proxy# n)
+    toHtmlRaw = toHtml
+
 instance ToHtml (Simple (Tagged '(Plain, b, '[]) ()))
   where
     toHtml _ = return ()
     toHtmlRaw _ = return ()
 
-instance (ToHtml (Tagged Input x), ToHtml (Simple (Tagged '(Plain, False, rs) xs)),
-        ToHtml (Proxy '(r, HasDef x)))
-        => ToHtml (Simple (Tagged '(Plain, False, '(r,t) ': rs) (x,xs)))
+instance (ToHtml (Tagged '(Input,(r::Symbol)) x)
+        , ToHtml (Simple (Tagged '(Plain, False, rs) xs))
+        , ToHtml (Proxy '(r, HasDef x))
+        ) => ToHtml (Simple (Tagged '(Plain, False, '(r,t) ': rs) (x,xs)))
   where
     toHtml (Tagged (Tagged (x,xs))) = do
-        -- termWith "script" [src_ "static/jq.js"] ""
-        -- termWith "script" [src_ "static/api.js"] ""
         tr_ $ do
             td_ $ toHtml (Proxy :: Proxy '(r,HasDef x))
-            td_ $ toHtml $ toInput x
+            td_ $ toHtml $ toInput (Proxy :: Proxy r) x
         toHtml $ toSimple (Tagged xs :: Tagged '(Plain, False, rs) xs)
     toHtmlRaw = toHtml
 

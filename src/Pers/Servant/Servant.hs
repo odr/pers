@@ -25,6 +25,7 @@ import Servant.JQuery
 import Data.Tagged
 import Data.Text(Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import Data.Int(Int64)
 import Data.ByteString(ByteString)
 import qualified Data.ByteString.Lazy as BL
@@ -34,6 +35,7 @@ import Data.Typeable
 import Data.Maybe(listToMaybe)
 import Data.Bifunctor(bimap)
 import Control.Applicative(liftA2)
+import Control.Concurrent(forkIO)
 
 import Pers.Types
 import Pers.Database.DDL
@@ -44,9 +46,13 @@ type PersMonad back = SessionMonad back (EitherT ServantErr IO)
 
 type ServData rep x
     = '(x, VRec rep (RecordDef x), VRec rep (Key x), VRec rep (DataRecord x))
-type family ServDatas rep xs where
-    ServDatas rep '[] = '[]
-    ServDatas rep (x ': xs) = ServData rep x ': ServDatas rep xs
+-- type family ServDatas rep xs where
+--     ServDatas rep '[] = '[]
+--     ServDatas rep (x ': xs) = ServData rep x ': ServDatas rep xs
+
+type PersAPI' rep opt back x
+    = PersAPI rep opt back x
+        (VRec rep (RecordDef x)) (VRec rep (Key x)) (VRec rep (DataRecord x))
 
 class   ( TableLike a
         , Rep rep (RecordDef a) ar
@@ -60,46 +66,26 @@ class   ( TableLike a
     type PersAPI rep opt back a ar kr dr
     persServer :: Proxy# rep -> Proxy# opt -> Proxy# back -> Proxy '(a,ar,kr,dr)
         -> ServerT (PersAPI rep opt back a ar kr dr) (PersMonad back)
+    jsPersAPI :: Proxy '(rep, opt, back, '(a, ar, kr, dr)) -> T.Text
 
 toPersAPI :: Proxy '(rep, opt, back, '(a, ar, kr, dr))
         -> Proxy (PersAPI rep opt back a ar kr dr)
 toPersAPI _ = Proxy
 
 mkJsAPI ::  ( HasJQ (PersAPI rep opt back a ar kr dr)
+            , PersServant rep opt back a ar kr dr
             , GenerateCode (JQ (PersAPI rep opt back a ar kr dr))
             , KnownSymbol (TabName a)
             )
         => Proxy '(rep, opt, back, '(a, ar, kr, dr)) -> IO ()
 mkJsAPI (ps :: Proxy '(rep, opt, back, '(a, ar, kr, dr)))
-    = writeFile ("js/" ++ sTab ++ "api.js") $ jsForAPI pAPI
+    = mapM_ (\(n,s) -> forkIO $ TIO.writeFile (mconcat ["js/", sTab, n]) s)
+        [ ("api.js", T.pack $ jsForAPI pAPI)
+        , (".js", jsPersAPI ps)
+        ]
   where
     pAPI = toPersAPI ps
     sTab = symbolVal' (proxy# :: Proxy# (TabName a))
-
-class PersServant' (rep::R) opt back (x::[(DataDef *,*,*,*)])
-  where
-    type PersAPI' rep opt back x
-    persServer' :: Proxy# rep -> Proxy# opt -> Proxy# back -> Proxy x
-        -> ServerT (PersAPI' rep opt back x) (PersMonad back)
-
-instance (PersServant rep opt back a ar kr dr)
-        => PersServant' rep opt back '[ '(a,ar,kr,dr)]
-  where
-    type PersAPI' rep opt back '[ '(a,ar,kr,dr)]
-        = PersAPI rep opt back a ar kr dr
-    persServer' pr po pb _
-        = persServer pr po pb (Proxy :: Proxy '(a,ar,kr,dr))
-
-instance    ( PersServant' rep opt back '[a]
-            , PersServant' rep opt back (a1 ': as)
-            )
-            => PersServant' rep opt back (a ': a1 ': as) where
-    type PersAPI' rep opt back (a ': a1 ': as)
-        = PersAPI' rep opt back '[a]
-        :<|> PersAPI' rep opt back (a1 ': as)
-    persServer' pr po pb (_::Proxy (a ': a1 ': as))
-        = persServer' pr po pb (Proxy :: Proxy '[a])
-        :<|> persServer' pr po pb (Proxy :: Proxy (a1 ': as))
 
 type PRecs rep rec ar = Tagged ('(rep, rec)) [ar]
 type PPks rep rec pk kr = Tagged ('(rep, ProjNames rec pk)) [kr]
@@ -116,12 +102,12 @@ instance    ( DBOption back
                              (TableDef n rec pk uk fk) ar kr dr
             , Curring rep kr
             , ServerT   (CaptureN pk kr (Get '[HTML, JSON]
-                            (Tagged opt (Tagged '(rep, rec) (Maybe ar))))
+                            (Tagged opt (Tagged '(rep, (TableDef n rec pk uk fk)) (Maybe ar))))
                         )
                         (PersMonad back)
                 ~ Curried rep kr
                         (PersMonad back
-                            (Tagged opt (Tagged '(rep, rec) (Maybe ar)))
+                            (Tagged opt (Tagged '(rep, (TableDef n rec pk uk fk)) (Maybe ar)))
                         )
             )
     => PersServant (rep::R) opt back (TableDef n rec pk uk fk) ar kr dr
@@ -132,7 +118,7 @@ instance    ( DBOption back
     type PersRecAPI rep opt back (TableDef n rec pk uk fk) ar kr dr =
         n   :> "rec"
             :> CaptureN pk kr (Get '[HTML,JSON]
-                        (Tagged opt (Tagged '(rep, rec) (Maybe ar))))
+                        (Tagged opt (Tagged '(rep, (TableDef n rec pk uk fk)) (Maybe ar))))
     type PersAPI rep opt back (TableDef n rec pk uk fk) ar kr dr =
         PersListAPI rep opt back (TableDef n rec pk uk fk) ar kr dr
         :<|>
@@ -150,8 +136,14 @@ instance    ( DBOption back
         fmap (Tagged . Tagged) (sel pTab mempty)
         :<|>
         curryN pRep
-            ((fmap (Tagged . Tagged . listToMaybe) . sel pTab . Equal pPkN)
-            :: kr -> PersMonad back (Tagged opt (Tagged '(rep, rec) (Maybe ar))))
+            ( (fmap (Tagged . Tagged . listToMaybe) . sel pTab . Equal pPkN)
+              :: kr -> PersMonad back
+                        (Tagged opt
+                            (Tagged '(rep, (TableDef n rec pk uk fk))
+                                    (Maybe ar)
+                            )
+                        )
+            )
         :<|>
         persInsServer (proxy# :: Proxy# (IsAutoPKb rep back kr)) pr pb pa
         :<|>
@@ -294,8 +286,20 @@ instance ToSample v v' => ToSample (Maybe v) (Maybe v') where
          , ("Not found:", Nothing)
          ]
 
+
 instance ToSample (Tagged '(Plain, x) r) (Tagged '(Plain, x) r')
-    =>   ToSample (Tagged '(Plain, x) (Maybe r)) (Tagged '(Plain, x) (Maybe r'))
+    =>   ToSample (Tagged '(Plain, (x :: [(Symbol, *)])) (Maybe r))
+                  (Tagged '(Plain, x) (Maybe r'))
+  where
+    toSamples _ =
+        [ ("Found:", maybe (Tagged Nothing) (retag . fmap Just)
+                        $ toSample (Proxy :: Proxy (Tagged '(Plain, x) r)))
+        , ("Not found:", Tagged Nothing)
+        ]
+
+instance ToSample (Tagged '(Plain, x) r) (Tagged '(Plain, x) r')
+    =>   ToSample (Tagged '(Plain, (x :: (Symbol, *))) (Maybe r))
+                  (Tagged '(Plain, x) (Maybe r'))
   where
     toSamples _ =
         [ ("Found:", maybe (Tagged Nothing) (retag . fmap Just)

@@ -39,9 +39,9 @@ createTab3 = do
     createTable pTab3'
     ins pTab3 $ map ($ ()) [(1,).(1,), (2,).(1,)]
 
-type Tab3API = PersAPI' Plain SimpleHtml Sqlite '[ServData Plain Tab3]
+type Tab3API = PersAPI' Plain SimpleHtml Sqlite Tab3
 serverTab3 = persServerSimple (proxy# :: Proxy# Plain)
-                (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy '[ServData Plain Tab3])
+                (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy (ServData Plain Tab3))
 pTab3API :: Proxy Tab3API
 pTab3API = Proxy
 pTab3API' :: Proxy '(Plain,SimpleHtml,Sqlite,ServData Plain Tab3)

@@ -44,9 +44,9 @@ createTab2 = do
         ])
         >>= liftIO . print
 
-type Tab2API = PersAPI' Plain SimpleHtml Sqlite '[ServData Plain Tab2]
+type Tab2API = PersAPI' Plain SimpleHtml Sqlite Tab2
 serverTab2 = persServerSimple (proxy# :: Proxy# Plain)
-                (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy '[ServData Plain Tab2])
+                (proxy# :: Proxy# Sqlite) (Proxy  :: Proxy (ServData Plain Tab2))
 pTab2API :: Proxy Tab2API
 pTab2API = Proxy
 pTab2API' :: Proxy '(Plain,SimpleHtml,Sqlite,ServData Plain Tab2)

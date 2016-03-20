@@ -64,8 +64,8 @@ main = do
     site
 
 site = do
-    forkIO writeJQ
-    mapM_ (forkIO)  [ mkJsAPI pTab1API'
+    forkIO $ JQ.file >>= TIO.readFile >>= TIO.writeFile "js/jq.js"
+    mapM_ forkIO    [ mkJsAPI pTab1API'
                     , mkJsAPI pTab2API'
                     , mkJsAPI pTab3API'
                     ]
@@ -112,7 +112,3 @@ instance ToCapture (Capture "t1_id" Int64) where
 instance ToCapture (Capture "t2_id" Int64) where
   toCapture _ = DocCapture "t2_id" "identity of record in table t2"
 
-writeJQ :: IO ()
-writeJQ = do
-  jq <- JQ.file >>= readFile
-  writeFile "js/jq.js" jq
